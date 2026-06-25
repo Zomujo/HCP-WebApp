@@ -5,20 +5,20 @@ export default function PatientsPage() {
   return (
     <div className="app-shell">
       <Sidebar />
-      <main className="content">
-        <div className="app-header">
+      <main className="content hcp-page">
+        <div className="hcp-page-header">
           <div>
-            <h1 className="page-title">Patients</h1>
+            <h1 className="hcp-page-title">Patients</h1>
             <p className="subtitle">8 patients in your care.</p>
           </div>
           <button className="primary small">+ Add patient</button>
         </div>
 
-        <div className="panel" style={{ padding: 26 }}>
-          <div className="search-row" style={{ marginBottom: 24 }}>
+        <div className="panel hcp-panel">
+          <div className="search-row" style={{ marginBottom: 16 }}>
             <input type="text" placeholder="Search by name, ID, hosp. number" />
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <span className="filter-pill">All</span>
+            <div className="filter-row">
+              <span className="filter-pill active">All</span>
               <span className="filter-pill">Hypertension</span>
               <span className="filter-pill">Diabetes</span>
               <span className="filter-pill">Both</span>
@@ -28,7 +28,7 @@ export default function PatientsPage() {
             </div>
           </div>
 
-          <table className="table">
+          <table className="table hcp-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -37,21 +37,28 @@ export default function PatientsPage() {
                 <th>Last check-in</th>
                 <th>Adherence</th>
                 <th>Status</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {patientList.map((patient) => (
                 <tr key={patient.id}>
-                  <td>{patient.name}</td>
+                  <td>
+                    <div className="table-name-cell">
+                      <span className="table-avatar">{patient.initials}</span>
+                      {patient.name}
+                    </div>
+                  </td>
                   <td>{patient.age}</td>
                   <td>{patient.condition}</td>
                   <td>{patient.lastCheckIn}</td>
-                  <td>{patient.adherence}</td>
+                  <td className="adherence-cell">{patient.adherence}</td>
                   <td>
                     <span className={`status-pill status-${patient.status.toLowerCase()}`}>
                       {patient.status}
                     </span>
                   </td>
+                  <td className="row-arrow">&gt;</td>
                 </tr>
               ))}
             </tbody>

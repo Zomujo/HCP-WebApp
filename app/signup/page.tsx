@@ -8,7 +8,7 @@ export default function SignupPage() {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     localStorage.setItem('hcp-auth-token', 'demo-token');
-    window.location.href = '/dashboard';
+    window.location.href = '/onboarding';
   };
 
   return (
@@ -21,14 +21,9 @@ export default function SignupPage() {
               <Image src="/logo.png" alt="Zomjuo logo" width={40} height={40} />
             </div>
             <div>
-              <p className="overline">Zomjuo</p>
-              <p className="subtitle">HCP portal</p>
+              <p className="auth-brand-title">Zyptyk</p>
+              <p className="auth-brand-subtitle">HCP portal</p>
             </div>
-          </div>
-
-          <div className="auth-copy">
-            <h1>Sign Up</h1>
-            <p className="text-muted">Create an account to manage patients and appointments.</p>
           </div>
 
           <button className="ghost auth-action-button">
@@ -50,14 +45,8 @@ export default function SignupPage() {
           </form>
 
           <p className="auth-footnote">
-            Already have an account? <Link href="/login">Sign in</Link>
+            Don&apos;t have an account? <Link href="/signup">Sign up</Link>
           </p>
-
-          <div className="auth-demo">
-            <p>Demo credentials:</p>
-            <p>Email: <strong>user@zomjuo.health</strong></p>
-            <p>Password: <strong>password123</strong></p>
-          </div>
         </section>
 
         <section className="auth-hero auth-hero-signup">

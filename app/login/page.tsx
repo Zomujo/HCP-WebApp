@@ -30,8 +30,8 @@ export default function LoginPage() {
               <Image src="/logo.png" alt="Zomjuo logo" width={28} height={28} />
             </div>
             <div>
-              <p className="overline">Zomjuo</p>
-              <p className="subtitle">HCP portal</p>
+              <p className="auth-brand-title">Zyptyk</p>
+              <p className="auth-brand-subtitle">HCP portal</p>
             </div>
           </div>
 
@@ -61,12 +61,6 @@ export default function LoginPage() {
           <p className="auth-footnote">
             Don&apos;t have an account? <Link href="/signup">Sign up</Link>
           </p>
-
-          <div className="auth-demo">
-            <p>Demo credentials:</p>
-            <p>Email: <strong>user@zomjuo.health</strong></p>
-            <p>Password: <strong>password123</strong></p>
-          </div>
         </section>
 
         <section className="auth-hero auth-hero-login">
