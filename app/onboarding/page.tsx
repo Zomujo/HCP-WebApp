@@ -76,9 +76,6 @@ export default function OnboardingPage() {
           <p className="onboarding-review-value">St. Jude's Medical Center</p>
           <p className="onboarding-review-value">North Wing, Houston, TX</p>
         </div>
-        <p className="onboarding-disclaimer">
-          By clicking "Submit", you certify that all information provided is accurate. Registration typically undergoes verification within 24-48 hours.
-        </p>
       </>
     );
   };
@@ -112,29 +109,38 @@ export default function OnboardingPage() {
           <div className="onboarding-content-zone">
             {renderStepBody()}
           </div>
-
-          <div className="onboarding-controls">
-            {activeStep > 0 ? (
-              <button type="button" className="secondary small" onClick={() => setActiveStep(activeStep - 1)}>
-                Back
-              </button>
-            ) : <span />}
-
-            <button
-              type="button"
-              className="primary small"
-              onClick={() => {
-                if (activeStep < 2) {
-                  setActiveStep(activeStep + 1);
-                } else {
-                  window.location.href = '/dashboard';
-                }
-              }}
-            >
-              {activeStep < 2 ? 'Save & Continue' : 'Submit'}
-            </button>
-          </div>
         </section>
+
+        {activeStep === 2 && (
+          <div className="onboarding-disclaimer-box">
+            <span className="onboarding-disclaimer-icon">i</span>
+            <p className="onboarding-disclaimer">
+              By clicking "Submit", you certify that all information provided is accurate. Registration typically undergoes verification within 24-48 hours.
+            </p>
+          </div>
+        )}
+
+        <div className={`onboarding-controls ${activeStep === 0 ? 'single' : ''}`}>
+          {activeStep > 0 ? (
+            <button type="button" className="secondary small" onClick={() => setActiveStep(activeStep - 1)}>
+              Back
+            </button>
+          ) : <span />}
+
+          <button
+            type="button"
+            className="primary small"
+            onClick={() => {
+              if (activeStep < 2) {
+                setActiveStep(activeStep + 1);
+              } else {
+                window.location.href = '/dashboard';
+              }
+            }}
+          >
+            {activeStep < 2 ? 'Save & Continue' : 'Submit'}
+          </button>
+        </div>
       </div>
     </main>
   );

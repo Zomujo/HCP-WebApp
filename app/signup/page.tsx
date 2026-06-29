@@ -45,7 +45,7 @@ export default function SignupPage() {
           </form>
 
           <p className="auth-footnote">
-            Don&apos;t have an account? <Link href="/signup">Sign up</Link>
+            Already have an account? <Link href="/login">Sign in</Link>
           </p>
         </section>
 

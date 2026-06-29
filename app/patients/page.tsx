@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { patientList } from '../lib/dummy';
 import { Sidebar } from '../components/Sidebar';
 
@@ -58,7 +59,11 @@ export default function PatientsPage() {
                       {patient.status}
                     </span>
                   </td>
-                  <td className="row-arrow">&gt;</td>
+                  <td className="row-arrow">
+                    <Link href={`/patients/${patient.id}`} aria-label={`Open ${patient.name} details`}>
+                      &gt;
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>
