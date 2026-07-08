@@ -1,9 +1,11 @@
 import { chatThreads, patientDetail } from '../lib/dummy';
 import { Sidebar } from '../components/Sidebar';
+import { ProtectedRoute } from '../components/ProtectedRoute';
 
 export default function ChatsPage() {
   return (
-    <div className="app-shell">
+    <ProtectedRoute requiredRole="doctor">
+      <div className="app-shell">
       <Sidebar />
       <main className="content hcp-page">
         <div className="hcp-page-header">
@@ -65,5 +67,6 @@ export default function ChatsPage() {
         </div>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }

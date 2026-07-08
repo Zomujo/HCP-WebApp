@@ -1,9 +1,11 @@
 import { profileData } from '../lib/dummy';
 import { Sidebar } from '../components/Sidebar';
+import { ProtectedRoute } from '../components/ProtectedRoute';
 
 export default function ProfilePage() {
   return (
-    <div className="app-shell">
+    <ProtectedRoute requiredRole="doctor">
+      <div className="app-shell">
       <Sidebar />
       <main className="content hcp-page">
         <div className="hcp-page-header">
@@ -50,5 +52,6 @@ export default function ProfilePage() {
         </div>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }

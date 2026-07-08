@@ -84,8 +84,8 @@ export default function OnboardingPage() {
     <main className="onboarding-page">
       <div className="onboarding-stage">
         <div className="onboarding-brand">
-          <Image src="/logo.png" alt="Zyptyk logo" width={22} height={22} />
-          <span>Zyptyk</span>
+          <Image src="/logo.png" alt="YLIMA logo" width={22} height={22} />
+          <span>YLIMA</span>
         </div>
 
         <section className="onboarding-shell compact">

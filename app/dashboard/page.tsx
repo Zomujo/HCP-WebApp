@@ -4,7 +4,7 @@ import { ProtectedRoute } from '../components/ProtectedRoute';
 
 export default function DashboardPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requiredRole="doctor">
       <div className="app-shell">
         <Sidebar />
         <main className="content hcp-page">

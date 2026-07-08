@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { patientList } from '../lib/dummy';
 import { Sidebar } from '../components/Sidebar';
+import { ProtectedRoute } from '../components/ProtectedRoute';
 
 export default function PatientsPage() {
   return (
-    <div className="app-shell">
+    <ProtectedRoute requiredRole="doctor">
+      <div className="app-shell">
       <Sidebar />
       <main className="content hcp-page">
         <div className="hcp-page-header">
@@ -71,5 +73,6 @@ export default function PatientsPage() {
         </div>
       </main>
     </div>
+    </ProtectedRoute>
   );
 }

@@ -1,6 +1,6 @@
 # HCP-WebApp
 
-Next.js frontend for the Zomjuo healthcare portal.
+Next.js frontend for the YLIMA healthcare portal.
 
 ## Setup
 

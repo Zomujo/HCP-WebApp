@@ -1,13 +1,16 @@
 "use client";
 
-import { FormEvent } from 'react';
+import { FormEvent, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
 export default function SignupPage() {
+  const [role, setRole] = useState<'doctor' | 'pharmacist'>('doctor');
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     localStorage.setItem('hcp-auth-token', 'demo-token');
+    localStorage.setItem('hcp-user-role', role);
     window.location.href = '/onboarding';
   };
 
@@ -18,10 +21,10 @@ export default function SignupPage() {
           <div className="auth-glow" />
           <div className="auth-brand">
             <div className="logo-mark">
-              <Image src="/logo.png" alt="Zomjuo logo" width={40} height={40} />
+              <Image src="/logo.png" alt="YLIMA logo" width={40} height={40} />
             </div>
             <div>
-              <p className="auth-brand-title">Zyptyk</p>
+              <p className="auth-brand-title">YLIMA</p>
               <p className="auth-brand-subtitle">HCP portal</p>
             </div>
           </div>
@@ -32,10 +35,29 @@ export default function SignupPage() {
           </button>
           <p className="auth-divider">Or sign up with email</p>
 
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button
+              type="button"
+              onClick={() => setRole('doctor')}
+              className={`${role === 'doctor' ? 'primary' : 'ghost'}`}
+              style={{ flex: 1, padding: '8px 12px', fontSize: '14px' }}
+            >
+              Doctor
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('pharmacist')}
+              className={`${role === 'pharmacist' ? 'primary' : 'ghost'}`}
+              style={{ flex: 1, padding: '8px 12px', fontSize: '14px' }}
+            >
+              Pharmacist
+            </button>
+          </div>
+
           <form className="auth-fields" onSubmit={handleSubmit}>
             <label>
               <span className="block-label">Email</span>
-              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@zomjuo.health" />
+              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@ylima.health" />
             </label>
             <label>
               <span className="block-label">Password</span>

@@ -3,27 +3,40 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { navItems } from '../lib/dummy';
+import { useEffect, useState } from 'react';
+import { getDoctorNavItems, getPharmacistNavItems } from '../lib/dummy';
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [userRole, setUserRole] = useState<'doctor' | 'pharmacist' | null>(null);
+
+  useEffect(() => {
+    const role = localStorage.getItem('hcp-user-role') as 'doctor' | 'pharmacist' | null;
+    setUserRole(role);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('hcp-auth-token');
+    localStorage.removeItem('hcp-user-role');
     router.replace('/login');
   };
+
+  const navItems = userRole === 'pharmacist' ? getPharmacistNavItems() : getDoctorNavItems();
+  const roleLabel = userRole === 'pharmacist' ? 'Pharmacist' : 'HCP portal';
+  const facilityName = userRole === 'pharmacist' ? 'Central Pharmacy' : 'Kumasi South Hosp';
+  const userName = userRole === 'pharmacist' ? 'James Kwakye' : 'Adwoa (HCP)';
 
   return (
     <aside className="sidebar hcp-sidebar">
       <div className="sidebar-header">
         <div className="sidebar-brand-row">
           <div className="logo-mark sidebar-logo-mark">
-            <Image src="/logo.png" alt="Zyptyk logo" width={18} height={18} />
+            <Image src="/logo.png" alt="YLIMA logo" width={18} height={18} />
           </div>
           <div>
-            <p style={{ margin: 0, fontWeight: 700 }}>Zyptyk</p>
-            <p className="text-muted" style={{ margin: 0, fontSize: '0.84rem' }}>HCP portal</p>
+            <p style={{ margin: 0, fontWeight: 700 }}>YLIMA</p>
+            <p className="text-muted" style={{ margin: 0, fontSize: '0.84rem' }}>{roleLabel}</p>
           </div>
         </div>
       </div>
@@ -38,10 +51,10 @@ export function Sidebar() {
 
       <div className="sidebar-footer">
         <div className="patient-pill">
-          <div className="avatar-badge">A</div>
+          <div className="avatar-badge">{userName[0]}</div>
           <div>
-            <p style={{ margin: 0, fontWeight: 700 }}>Adwoa (HCP)</p>
-            <p className="text-muted" style={{ margin: 0, fontSize: '0.9rem' }}>Kumasi South Hosp</p>
+            <p style={{ margin: 0, fontWeight: 700 }}>{userName}</p>
+            <p className="text-muted" style={{ margin: 0, fontSize: '0.9rem' }}>{facilityName}</p>
           </div>
         </div>
         <button type="button" className="ghost small" onClick={handleLogout}>

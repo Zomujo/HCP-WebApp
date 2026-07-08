@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { appointments } from '../lib/dummy';
 import { Sidebar } from '../components/Sidebar';
+import { ProtectedRoute } from '../components/ProtectedRoute';
 
 export default function AppointmentsPage() {
   const [showModal, setShowModal] = useState(false);
 
   return (
-    <div className="app-shell">
+    <ProtectedRoute requiredRole="doctor">
+      <div className="app-shell">
       <Sidebar />
       <main className="content hcp-page">
         <div className="hcp-page-header">
@@ -77,5 +79,6 @@ export default function AppointmentsPage() {
         )}
       </main>
     </div>
+    </ProtectedRoute>
   );
 }

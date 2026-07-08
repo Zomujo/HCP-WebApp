@@ -1,10 +1,20 @@
-export const navItems = [
+export const getDoctorNavItems = () => [
   { href: '/dashboard', label: 'Overview' },
   { href: '/appointments', label: 'Appointments' },
   { href: '/patients', label: 'Patients' },
   { href: '/chats', label: 'Chats' },
   { href: '/profile', label: 'Profile' },
 ];
+
+export const getPharmacistNavItems = () => [
+  { href: '/pharmacy/dashboard', label: 'Dashboard' },
+  { href: '/pharmacy/prescriptions', label: 'Prescriptions' },
+  { href: '/pharmacy/inventory', label: 'Inventory' },
+  { href: '/pharmacy/dispensing', label: 'Dispensing' },
+  { href: '/pharmacy/chats', label: 'Chats' },
+];
+
+export const navItems = getDoctorNavItems();
 
 export const patientList = [
   { id: 'akua-mensah', name: 'Akua Mensah', initials: 'AM', age: 62, condition: 'Hypertension', lastCheckIn: '2h ago', adherence: '64%', status: 'Critical' },
@@ -92,3 +102,38 @@ export const profileData = {
   patients: 137,
   verified: true,
 };
+
+// Pharmacy-specific data
+export const pharmacyDashboardStats = [
+  { label: 'Pending Prescriptions', value: '24' },
+  { label: 'Low Stock Items', value: '6' },
+  { label: 'Dispensed Today', value: '142' },
+];
+
+export const pendingPrescriptions = [
+  { id: 'rx-001', patient: 'Akua Mensah', medication: 'Amlodipine 5mg', quantity: 30, status: 'Pending', time: '2h ago', doctor: 'Dr. Ama Osei' },
+  { id: 'rx-002', patient: 'Kwame Asare', medication: 'Metformin 500mg', quantity: 60, status: 'Pending', time: '1h ago', doctor: 'Dr. Kwesi Boateng' },
+  { id: 'rx-003', patient: 'Yaa Owusu', medication: 'Lisinopril 10mg', quantity: 30, status: 'Ready', time: '30m ago', doctor: 'Dr. Ama Osei' },
+  { id: 'rx-004', patient: 'Kofi Owusu', medication: 'Atorvastatin 20mg', quantity: 30, status: 'Pending', time: '45m ago', doctor: 'Dr. Kwesi Boateng' },
+];
+
+export const inventoryItems = [
+  { id: 'inv-001', name: 'Amlodipine 5mg', stock: 150, minimum: 200, status: 'Low', unit: 'tablets' },
+  { id: 'inv-002', name: 'Metformin 500mg', stock: 320, minimum: 300, status: 'Adequate', unit: 'tablets' },
+  { id: 'inv-003', name: 'Lisinopril 10mg', stock: 85, minimum: 150, status: 'Low', unit: 'tablets' },
+  { id: 'inv-004', name: 'Atorvastatin 20mg', stock: 210, minimum: 200, status: 'Adequate', unit: 'tablets' },
+  { id: 'inv-005', name: 'Hydrochlorothiazide 25mg', stock: 45, minimum: 100, status: 'Critical', unit: 'tablets' },
+  { id: 'inv-006', name: 'Aspirin 100mg', stock: 500, minimum: 300, status: 'Adequate', unit: 'tablets' },
+];
+
+export const dispensingHistory = [
+  { id: 'disp-1', patient: 'Esi Tetteh', medication: 'Amlodipine 5mg', quantity: 30, doctor: 'Dr. Ama Osei', time: 'Today 09:15', status: 'Completed' },
+  { id: 'disp-2', patient: 'Auntie Ama Boateng', medication: 'Metformin 500mg', quantity: 60, doctor: 'Dr. Kwesi Boateng', time: 'Today 08:45', status: 'Completed' },
+  { id: 'disp-3', patient: 'Joseph Mensah', medication: 'Lisinopril 10mg', quantity: 30, doctor: 'Dr. Ama Osei', time: 'Yesterday 14:20', status: 'Completed' },
+];
+
+export const pharmacyChatThreads = [
+  { id: 'phathread-1', name: 'Dr. Ama Osei', latest: 'Can we get more Amlodipine soon?', time: '1h' },
+  { id: 'phathread-2', name: 'Akua Mensah', latest: 'Can I take this medication with food?', time: '3h' },
+  { id: 'phathread-3', name: 'Dr. Kwesi Boateng', latest: 'Prescription for Kwame is ready for pickup', time: '12m' },
+];

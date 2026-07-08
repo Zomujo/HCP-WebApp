@@ -1,23 +1,27 @@
 "use client";
 
-import { FormEvent } from 'react';
+import { FormEvent, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
 export default function LoginPage() {
+  const [role, setRole] = useState<'doctor' | 'pharmacist'>('doctor');
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const email = data.get('email');
     const password = data.get('password');
 
-    if (email === 'user@zomjuo.health' && password === 'password123') {
+    if (email === 'user@ylima.health' && password === 'password123') {
       localStorage.setItem('hcp-auth-token', 'demo-token');
-      window.location.href = '/dashboard';
+      localStorage.setItem('hcp-user-role', role);
+      const redirectPath = role === 'doctor' ? '/dashboard' : '/pharmacy/dashboard';
+      window.location.href = redirectPath;
       return;
     }
 
-    alert('Invalid demo credentials. Use user@zomjuo.health / password123');
+    alert('Invalid demo credentials. Use user@ylima.health / password123');
   };
 
   return (
@@ -27,10 +31,10 @@ export default function LoginPage() {
           <div className="auth-glow" />
           <div className="auth-brand">
             <div className="logo-mark">
-              <Image src="/logo.png" alt="Zomjuo logo" width={28} height={28} />
+              <Image src="/logo.png" alt="YLIMA logo" width={28} height={28} />
             </div>
             <div>
-              <p className="auth-brand-title">Zyptyk</p>
+              <p className="auth-brand-title">YLIMA</p>
               <p className="auth-brand-subtitle">HCP portal</p>
             </div>
           </div>
@@ -46,10 +50,29 @@ export default function LoginPage() {
           </button>
           <p className="auth-divider">Or log in with email</p>
 
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <button
+              type="button"
+              onClick={() => setRole('doctor')}
+              className={`${role === 'doctor' ? 'primary' : 'ghost'}`}
+              style={{ flex: 1, padding: '8px 12px', fontSize: '14px' }}
+            >
+              Doctor
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('pharmacist')}
+              className={`${role === 'pharmacist' ? 'primary' : 'ghost'}`}
+              style={{ flex: 1, padding: '8px 12px', fontSize: '14px' }}
+            >
+              Pharmacist
+            </button>
+          </div>
+
           <form className="auth-fields" onSubmit={handleSubmit}>
             <label>
               <span className="block-label">Email</span>
-              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@zomjuo.health" />
+              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@ylima.health" />
             </label>
             <label>
               <span className="block-label">Password</span>
