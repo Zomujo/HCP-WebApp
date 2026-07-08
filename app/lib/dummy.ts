@@ -9,6 +9,7 @@ export const getHealthWorkerNavItems = () => [
 export const getPharmacyNavItems = () => [
   { href: '/pharmacy/dashboard', label: 'Dashboard' },
   { href: '/pharmacy/prescriptions', label: 'Prescriptions' },
+  { href: '/pharmacy/patients', label: 'Patients' },
   { href: '/pharmacy/inventory', label: 'Inventory' },
   { href: '/pharmacy/dispensing', label: 'Dispensing' },
   { href: '/pharmacy/chats', label: 'Chats' },

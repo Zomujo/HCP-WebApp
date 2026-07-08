@@ -38,6 +38,15 @@ interface RegisterPatientInput {
   facility?: string;
 }
 
+interface UpdatePatientInput {
+  fullName?: string;
+  age?: number;
+  condition?: string;
+  ghanaCard?: string;
+  nhis?: string;
+  facility?: string;
+}
+
 interface AddVitalInput {
   systolic: number;
   diastolic: number;
@@ -133,7 +142,17 @@ function setStoredVitals(vitals: VitalEntry[]): void {
 
 export function getAllPatients(): PatientRecord[] {
   const stored = getStoredPatients();
-  return [...basePatients, ...stored];
+  const byId = new Map<string, PatientRecord>();
+
+  for (const patient of basePatients) {
+    byId.set(patient.id, patient);
+  }
+
+  for (const patient of stored) {
+    byId.set(patient.id, patient);
+  }
+
+  return Array.from(byId.values());
 }
 
 export function getPatientById(id: string): PatientRecord | undefined {
@@ -162,6 +181,37 @@ export function registerPatient(input: RegisterPatientInput): PatientRecord {
   setStoredPatients(patients);
 
   return patient;
+}
+
+export function updatePatientDetails(patientId: string, input: UpdatePatientInput): PatientRecord | undefined {
+  const existingPatient = getPatientById(patientId);
+  if (!existingPatient) {
+    return undefined;
+  }
+
+  const nextName = (input.fullName || existingPatient.name).trim();
+  const updatedPatient: PatientRecord = {
+    ...existingPatient,
+    name: nextName,
+    initials: buildInitials(nextName),
+    age: input.age ?? existingPatient.age,
+    condition: (input.condition || existingPatient.condition).trim(),
+    ghanaCard: input.ghanaCard !== undefined ? input.ghanaCard.trim() || undefined : existingPatient.ghanaCard,
+    nhis: input.nhis !== undefined ? input.nhis.trim() || undefined : existingPatient.nhis,
+    facility: input.facility !== undefined ? input.facility.trim() || undefined : existingPatient.facility,
+  };
+
+  const storedPatients = getStoredPatients();
+  const existingStoredIndex = storedPatients.findIndex((patient) => patient.id === patientId);
+
+  if (existingStoredIndex >= 0) {
+    storedPatients[existingStoredIndex] = updatedPatient;
+  } else {
+    storedPatients.unshift(updatedPatient);
+  }
+
+  setStoredPatients(storedPatients);
+  return updatedPatient;
 }
 
 export function getVitalsForPatient(patientId: string): VitalEntry[] {

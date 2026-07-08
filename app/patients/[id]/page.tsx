@@ -4,16 +4,39 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Sidebar } from '../../components/Sidebar';
 import { patientDetail } from '../../lib/dummy';
-import { addVital, getPatientById, getVitalsForPatient, VitalEntry } from '../../lib/patientStore';
+import { addVital, getPatientById, getVitalsForPatient, PatientRecord, updatePatientDetails, VitalEntry } from '../../lib/patientStore';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 
 const tabs = ['Overview', 'Readings', 'Medication', 'Appointments', 'Chat'] as const;
 type TabName = (typeof tabs)[number];
 
+const fallbackPatient: PatientRecord = {
+  id: 'akua-mensah',
+  name: patientDetail.name,
+  initials: patientDetail.initials,
+  age: patientDetail.age,
+  condition: patientDetail.condition,
+  ghanaCard: patientDetail.ghanaCard,
+  nhis: patientDetail.nhis,
+  facility: patientDetail.facility,
+  joined: patientDetail.joined,
+  status: 'Critical',
+  adherence: patientDetail.adherence,
+  lastCheckIn: 'Today',
+};
+
 export default function PatientDetailsPage() {
   const params = useParams<{ id: string }>();
   const patientId = Array.isArray(params.id) ? params.id[0] : params.id;
   const [activeTab, setActiveTab] = useState<TabName>('Overview');
+  const [patient, setPatient] = useState<PatientRecord>(fallbackPatient);
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [editName, setEditName] = useState(fallbackPatient.name);
+  const [editAge, setEditAge] = useState(String(fallbackPatient.age));
+  const [editCondition, setEditCondition] = useState(fallbackPatient.condition);
+  const [editGhanaCard, setEditGhanaCard] = useState(fallbackPatient.ghanaCard || '');
+  const [editNhis, setEditNhis] = useState(fallbackPatient.nhis || '');
+  const [editFacility, setEditFacility] = useState(fallbackPatient.facility || '');
   const [vitals, setVitals] = useState<VitalEntry[]>([]);
   const [systolic, setSystolic] = useState('');
   const [diastolic, setDiastolic] = useState('');
@@ -22,27 +45,24 @@ export default function PatientDetailsPage() {
   const [weightKg, setWeightKg] = useState('');
   const [note, setNote] = useState('');
 
-  const patient = useMemo(() => {
-    const loadedPatient = patientId ? getPatientById(patientId) : undefined;
-    if (loadedPatient) {
-      return loadedPatient;
+  useEffect(() => {
+    if (!patientId) {
+      setPatient(fallbackPatient);
+      return;
     }
 
-    return {
-      id: 'akua-mensah',
-      name: patientDetail.name,
-      initials: patientDetail.initials,
-      age: patientDetail.age,
-      condition: patientDetail.condition,
-      ghanaCard: patientDetail.ghanaCard,
-      nhis: patientDetail.nhis,
-      facility: patientDetail.facility,
-      joined: patientDetail.joined,
-      status: 'Critical' as const,
-      adherence: patientDetail.adherence,
-      lastCheckIn: 'Today',
-    };
-  }, [patientId]);
+    const loadedPatient = getPatientById(patientId);
+    setPatient(loadedPatient || fallbackPatient);
+  }, [patientId, vitals.length]);
+
+  useEffect(() => {
+    setEditName(patient.name);
+    setEditAge(String(patient.age));
+    setEditCondition(patient.condition);
+    setEditGhanaCard(patient.ghanaCard || '');
+    setEditNhis(patient.nhis || '');
+    setEditFacility(patient.facility || '');
+  }, [patient]);
 
   useEffect(() => {
     if (!patientId) {
@@ -108,6 +128,44 @@ export default function PatientDetailsPage() {
 
   const latestVitalsLabel = `${latestVital.systolic} / ${latestVital.diastolic}`;
 
+  const handleSaveDetails = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const parsedAge = Number(editAge);
+    if (!editName.trim() || Number.isNaN(parsedAge) || parsedAge <= 0 || !editCondition.trim()) {
+      alert('Please provide a valid name, age, and condition.');
+      return;
+    }
+
+    if (!patientId) {
+      return;
+    }
+
+    const updatedPatient = updatePatientDetails(patientId, {
+      fullName: editName,
+      age: parsedAge,
+      condition: editCondition,
+      ghanaCard: editGhanaCard,
+      nhis: editNhis,
+      facility: editFacility,
+    });
+
+    if (updatedPatient) {
+      setPatient(updatedPatient);
+      setIsEditingDetails(false);
+    }
+  };
+
+  const handleCancelDetailsEdit = () => {
+    setEditName(patient.name);
+    setEditAge(String(patient.age));
+    setEditCondition(patient.condition);
+    setEditGhanaCard(patient.ghanaCard || '');
+    setEditNhis(patient.nhis || '');
+    setEditFacility(patient.facility || '');
+    setIsEditingDetails(false);
+  };
+
   return (
     <ProtectedRoute requiredRole="health-worker">
       <div className="app-shell">
@@ -137,37 +195,107 @@ export default function PatientDetailsPage() {
           {activeTab === 'Overview' && (
             <section className="patient-overview-grid">
               <div className="panel hcp-panel">
-                <p className="panel-title">Patient details</p>
-                <div className="patient-kv-grid">
-                  <div>
-                    <p className="block-label">Full name</p>
-                    <p>{patient.name}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">Age</p>
-                    <p>{patient.age}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">Ghana Card</p>
-                    <p>{patient.ghanaCard || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">NHIS</p>
-                    <p>{patient.nhis || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">Conditions</p>
-                    <p>{patient.condition}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">Registered</p>
-                    <p>{patient.joined || '2025'}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">Facility</p>
-                    <p>{patient.facility || 'Kumasi South Hospital'}</p>
-                  </div>
+                <div className="panel-headline-row" style={{ marginBottom: 12 }}>
+                  <p className="panel-title">Patient details</p>
+                  {!isEditingDetails ? (
+                    <button
+                      type="button"
+                      aria-label="Edit patient details"
+                      title="Edit patient details"
+                      onClick={() => setIsEditingDetails(true)}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 10,
+                        border: '1px solid #d49b3f',
+                        background: '#fff7ea',
+                        color: '#a96a0b',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M14.06 4.94l3.75 3.75" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  ) : null}
                 </div>
+
+                {!isEditingDetails ? (
+                  <div className="patient-kv-grid">
+                    <div>
+                      <p className="block-label">Full name</p>
+                      <p>{patient.name}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Age</p>
+                      <p>{patient.age}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Ghana Card</p>
+                      <p>{patient.ghanaCard || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">NHIS</p>
+                      <p>{patient.nhis || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Conditions</p>
+                      <p>{patient.condition}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Registered</p>
+                      <p>{patient.joined || '2025'}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Facility</p>
+                      <p>{patient.facility || 'Kumasi South Hospital'}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveDetails}>
+                    <div className="onboarding-grid-two">
+                      <label>
+                        <span className="onboarding-field-label">Full name</span>
+                        <input value={editName} onChange={(event) => setEditName(event.target.value)} required />
+                      </label>
+                      <label>
+                        <span className="onboarding-field-label">Age</span>
+                        <input type="number" min={1} value={editAge} onChange={(event) => setEditAge(event.target.value)} required />
+                      </label>
+                    </div>
+
+                    <div className="onboarding-grid-two">
+                      <label>
+                        <span className="onboarding-field-label">Condition</span>
+                        <input value={editCondition} onChange={(event) => setEditCondition(event.target.value)} required />
+                      </label>
+                      <label>
+                        <span className="onboarding-field-label">Facility</span>
+                        <input value={editFacility} onChange={(event) => setEditFacility(event.target.value)} />
+                      </label>
+                    </div>
+
+                    <div className="onboarding-grid-two">
+                      <label>
+                        <span className="onboarding-field-label">Ghana Card</span>
+                        <input value={editGhanaCard} onChange={(event) => setEditGhanaCard(event.target.value)} />
+                      </label>
+                      <label>
+                        <span className="onboarding-field-label">NHIS</span>
+                        <input value={editNhis} onChange={(event) => setEditNhis(event.target.value)} />
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+                      <button type="button" className="ghost small" onClick={handleCancelDetailsEdit}>Cancel</button>
+                      <button type="submit" className="primary small">Save changes</button>
+                    </div>
+                  </form>
+                )}
               </div>
 
               <div className="panel hcp-panel">
