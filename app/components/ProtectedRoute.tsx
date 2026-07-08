@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'doctor' | 'pharmacist';
+  requiredRole?: 'health-worker' | 'pharmacy';
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
@@ -14,7 +14,7 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
 
   useEffect(() => {
     const token = localStorage.getItem('hcp-auth-token');
-    const userRole = localStorage.getItem('hcp-user-role') as 'doctor' | 'pharmacist' | null;
+    const userRole = localStorage.getItem('hcp-user-role') as 'health-worker' | 'pharmacy' | null;
 
     if (!token) {
       router.replace('/login');
@@ -22,7 +22,7 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     }
 
     if (requiredRole && userRole !== requiredRole) {
-      const redirectPath = userRole === 'doctor' ? '/dashboard' : '/pharmacy/dashboard';
+      const redirectPath = userRole === 'health-worker' ? '/dashboard' : '/pharmacy/dashboard';
       router.replace(redirectPath);
       return;
     }

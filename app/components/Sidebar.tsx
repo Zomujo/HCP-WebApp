@@ -4,15 +4,15 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { getDoctorNavItems, getPharmacistNavItems } from '../lib/dummy';
+import { getHealthWorkerNavItems, getPharmacyNavItems } from '../lib/dummy';
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [userRole, setUserRole] = useState<'doctor' | 'pharmacist' | null>(null);
+  const [userRole, setUserRole] = useState<'health-worker' | 'pharmacy' | null>(null);
 
   useEffect(() => {
-    const role = localStorage.getItem('hcp-user-role') as 'doctor' | 'pharmacist' | null;
+    const role = localStorage.getItem('hcp-user-role') as 'health-worker' | 'pharmacy' | null;
     setUserRole(role);
   }, []);
 
@@ -22,10 +22,10 @@ export function Sidebar() {
     router.replace('/login');
   };
 
-  const navItems = userRole === 'pharmacist' ? getPharmacistNavItems() : getDoctorNavItems();
-  const roleLabel = userRole === 'pharmacist' ? 'Pharmacist' : 'HCP portal';
-  const facilityName = userRole === 'pharmacist' ? 'Central Pharmacy' : 'Kumasi South Hosp';
-  const userName = userRole === 'pharmacist' ? 'James Kwakye' : 'Adwoa (HCP)';
+  const navItems = userRole === 'pharmacy' ? getPharmacyNavItems() : getHealthWorkerNavItems();
+  const roleLabel = userRole === 'pharmacy' ? 'Pharmacy' : 'Health Worker portal';
+  const facilityName = userRole === 'pharmacy' ? 'Central Pharmacy' : 'Kumasi South Hosp';
+  const userName = userRole === 'pharmacy' ? 'James Kwakye' : 'Adwoa (HW)';
 
   return (
     <aside className="sidebar hcp-sidebar">

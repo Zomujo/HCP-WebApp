@@ -6,7 +6,7 @@ export default function PharmacyDashboardPage() {
   const lowStockItems = inventoryItems.filter(item => item.status === 'Low' || item.status === 'Critical');
 
   return (
-    <ProtectedRoute requiredRole="pharmacist">
+    <ProtectedRoute requiredRole="pharmacy">
       <div className="app-shell">
         <Sidebar />
         <main className="content hcp-page">
@@ -41,7 +41,7 @@ export default function PharmacyDashboardPage() {
                   <th>Patient</th>
                   <th>Medication</th>
                   <th>Qty</th>
-                  <th>Doctor</th>
+                  <th>Health Worker</th>
                   <th>Time</th>
                   <th>Status</th>
                   <th />

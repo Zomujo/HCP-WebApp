@@ -4,14 +4,14 @@ import { ProtectedRoute } from '../../components/ProtectedRoute';
 
 export default function PrescriptionsPage() {
   return (
-    <ProtectedRoute requiredRole="pharmacist">
+    <ProtectedRoute requiredRole="pharmacy">
       <div className="app-shell">
         <Sidebar />
         <main className="content hcp-page">
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Prescriptions Queue</h1>
-              <p className="subtitle">Review and process incoming prescriptions from doctors.</p>
+              <p className="subtitle">Review and process incoming prescriptions from health workers.</p>
             </div>
           </div>
 
@@ -29,7 +29,7 @@ export default function PrescriptionsPage() {
                   <th>Patient</th>
                   <th>Medication</th>
                   <th>Quantity</th>
-                  <th>Doctor</th>
+                  <th>Health Worker</th>
                   <th>Received</th>
                   <th>Status</th>
                   <th>Action</th>

@@ -4,7 +4,7 @@ import { ProtectedRoute } from '../../components/ProtectedRoute';
 
 export default function DispensingPage() {
   return (
-    <ProtectedRoute requiredRole="pharmacist">
+    <ProtectedRoute requiredRole="pharmacy">
       <div className="app-shell">
         <Sidebar />
         <main className="content hcp-page">

@@ -1,4 +1,4 @@
-export const getDoctorNavItems = () => [
+export const getHealthWorkerNavItems = () => [
   { href: '/dashboard', label: 'Overview' },
   { href: '/appointments', label: 'Appointments' },
   { href: '/patients', label: 'Patients' },
@@ -6,7 +6,7 @@ export const getDoctorNavItems = () => [
   { href: '/profile', label: 'Profile' },
 ];
 
-export const getPharmacistNavItems = () => [
+export const getPharmacyNavItems = () => [
   { href: '/pharmacy/dashboard', label: 'Dashboard' },
   { href: '/pharmacy/prescriptions', label: 'Prescriptions' },
   { href: '/pharmacy/inventory', label: 'Inventory' },
@@ -14,7 +14,7 @@ export const getPharmacistNavItems = () => [
   { href: '/pharmacy/chats', label: 'Chats' },
 ];
 
-export const navItems = getDoctorNavItems();
+export const navItems = getHealthWorkerNavItems();
 
 export const patientList = [
   { id: 'akua-mensah', name: 'Akua Mensah', initials: 'AM', age: 62, condition: 'Hypertension', lastCheckIn: '2h ago', adherence: '64%', status: 'Critical' },
@@ -95,7 +95,7 @@ export const patientDetail = {
 
 export const profileData = {
   name: 'Adwoa Owusu',
-  title: 'Healthcare Professional (HCP)',
+  title: 'Health Worker',
   facility: 'Kumasi South Hospital',
   ghanaCard: 'GHA-XXXXXXX-7421',
   email: 'adwoa.owusu@zomujo.health',

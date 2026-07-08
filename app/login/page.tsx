@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 export default function LoginPage() {
-  const [role, setRole] = useState<'doctor' | 'pharmacist'>('doctor');
+  const [role, setRole] = useState<'health-worker' | 'pharmacy'>('health-worker');
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -16,7 +16,7 @@ export default function LoginPage() {
     if (email === 'user@yelima.health' && password === 'password123') {
       localStorage.setItem('hcp-auth-token', 'demo-token');
       localStorage.setItem('hcp-user-role', role);
-      const redirectPath = role === 'doctor' ? '/dashboard' : '/pharmacy/dashboard';
+      const redirectPath = role === 'health-worker' ? '/dashboard' : '/pharmacy/dashboard';
       window.location.href = redirectPath;
       return;
     }
@@ -35,7 +35,7 @@ export default function LoginPage() {
             </div>
             <div>
               <p className="auth-brand-title">YELIMA</p>
-              <p className="auth-brand-subtitle">HCP portal</p>
+              <p className="auth-brand-subtitle">Health Worker portal</p>
             </div>
           </div>
 
@@ -53,19 +53,19 @@ export default function LoginPage() {
           <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
             <button
               type="button"
-              onClick={() => setRole('doctor')}
-              className={`${role === 'doctor' ? 'primary' : 'ghost'}`}
+              onClick={() => setRole('health-worker')}
+              className={`${role === 'health-worker' ? 'primary' : 'ghost'}`}
               style={{ flex: 1, padding: '8px 12px', fontSize: '14px' }}
             >
-              Doctor
+              Health Worker
             </button>
             <button
               type="button"
-              onClick={() => setRole('pharmacist')}
-              className={`${role === 'pharmacist' ? 'primary' : 'ghost'}`}
+              onClick={() => setRole('pharmacy')}
+              className={`${role === 'pharmacy' ? 'primary' : 'ghost'}`}
               style={{ flex: 1, padding: '8px 12px', fontSize: '14px' }}
             >
-              Pharmacist
+              Pharmacy
             </button>
           </div>
 

@@ -1,115 +1,250 @@
 "use client";
 
-import { useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { Sidebar } from '../../components/Sidebar';
 import { patientDetail } from '../../lib/dummy';
+import { addVital, getPatientById, getVitalsForPatient, VitalEntry } from '../../lib/patientStore';
+import { ProtectedRoute } from '../../components/ProtectedRoute';
 
 const tabs = ['Overview', 'Readings', 'Medication', 'Appointments', 'Chat'] as const;
 type TabName = (typeof tabs)[number];
 
 export default function PatientDetailsPage() {
+  const params = useParams<{ id: string }>();
+  const patientId = Array.isArray(params.id) ? params.id[0] : params.id;
   const [activeTab, setActiveTab] = useState<TabName>('Overview');
+  const [vitals, setVitals] = useState<VitalEntry[]>([]);
+  const [systolic, setSystolic] = useState('');
+  const [diastolic, setDiastolic] = useState('');
+  const [pulse, setPulse] = useState('');
+  const [temperature, setTemperature] = useState('');
+  const [weightKg, setWeightKg] = useState('');
+  const [note, setNote] = useState('');
+
+  const patient = useMemo(() => {
+    const loadedPatient = patientId ? getPatientById(patientId) : undefined;
+    if (loadedPatient) {
+      return loadedPatient;
+    }
+
+    return {
+      id: 'akua-mensah',
+      name: patientDetail.name,
+      initials: patientDetail.initials,
+      age: patientDetail.age,
+      condition: patientDetail.condition,
+      ghanaCard: patientDetail.ghanaCard,
+      nhis: patientDetail.nhis,
+      facility: patientDetail.facility,
+      joined: patientDetail.joined,
+      status: 'Critical' as const,
+      adherence: patientDetail.adherence,
+      lastCheckIn: 'Today',
+    };
+  }, [patientId]);
+
+  useEffect(() => {
+    if (!patientId) {
+      return;
+    }
+
+    setVitals(getVitalsForPatient(patientId));
+  }, [patientId]);
+
+  const latestVital = vitals[0] || {
+    systolic: patientDetail.vitals.systolic,
+    diastolic: patientDetail.vitals.diastolic,
+    note: patientDetail.vitals.note,
+    takenAt: new Date().toISOString(),
+  };
+
+  const readingRows = vitals.length
+    ? vitals
+    : patientDetail.readings.map((reading, index) => {
+        const parts = reading.value.split('/').map((value) => Number(value.trim()));
+        return {
+          id: `fallback-${index}`,
+          patientId: patient.id,
+          systolic: parts[0],
+          diastolic: parts[1],
+          note: reading.note,
+          takenAt: reading.time,
+        };
+      });
+
+  const handleSaveVitals = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!patientId) {
+      return;
+    }
+
+    const parsedSystolic = Number(systolic);
+    const parsedDiastolic = Number(diastolic);
+
+    if (Number.isNaN(parsedSystolic) || Number.isNaN(parsedDiastolic)) {
+      alert('Please enter valid systolic and diastolic values.');
+      return;
+    }
+
+    addVital(patientId, {
+      systolic: parsedSystolic,
+      diastolic: parsedDiastolic,
+      pulse: pulse ? Number(pulse) : undefined,
+      temperature: temperature ? Number(temperature) : undefined,
+      weightKg: weightKg ? Number(weightKg) : undefined,
+      note,
+    });
+
+    setVitals(getVitalsForPatient(patientId));
+    setSystolic('');
+    setDiastolic('');
+    setPulse('');
+    setTemperature('');
+    setWeightKg('');
+    setNote('');
+  };
+
+  const latestVitalsLabel = `${latestVital.systolic} / ${latestVital.diastolic}`;
 
   return (
-    <div className="app-shell">
-      <Sidebar />
-      <main className="content hcp-page">
-        <section className="patient-head-figma">
-          <div className="table-avatar patient-head-avatar">{patientDetail.initials}</div>
-          <div>
-            <h1 className="patient-head-title">{patientDetail.name}</h1>
-            <p className="text-muted" style={{ margin: '4px 0 0' }}>{patientDetail.age} • {patientDetail.condition} • Patient since {patientDetail.joined}</p>
-            <div className="patient-chip-row">
-              <span className="badge badge-critical">3 critical readings</span>
-              <span className="badge badge-caution">Adherence 64%</span>
-              <span className="badge" style={{ background: '#f3efe8', color: '#525a67' }}>Assigned to you</span>
-            </div>
-          </div>
-        </section>
-
-        <nav className="patient-tab-nav" aria-label="Patient tabs">
-          {tabs.map((tab) => (
-            <button key={tab} type="button" className={`patient-tab-btn ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>
-              {tab}
-            </button>
-          ))}
-        </nav>
-
-        {activeTab === 'Overview' && (
-          <section className="patient-overview-grid">
-            <div className="panel hcp-panel">
-              <p className="panel-title">Patient details</p>
-              <div className="patient-kv-grid">
-                <div>
-                  <p className="block-label">Full name</p>
-                  <p>{patientDetail.name}</p>
-                </div>
-                <div>
-                  <p className="block-label">Age</p>
-                  <p>{patientDetail.age}</p>
-                </div>
-                <div>
-                  <p className="block-label">Ghana Card</p>
-                  <p>{patientDetail.ghanaCard}</p>
-                </div>
-                <div>
-                  <p className="block-label">NHIS</p>
-                  <p>{patientDetail.nhis}</p>
-                </div>
-                <div>
-                  <p className="block-label">Conditions</p>
-                  <p>{patientDetail.condition}</p>
-                </div>
-                <div>
-                  <p className="block-label">Registered</p>
-                  <p>14 Jan 2025</p>
-                </div>
-                <div>
-                  <p className="block-label">Facility</p>
-                  <p>{patientDetail.facility}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="panel hcp-panel">
-              <p className="panel-title">Latest vitals</p>
-              <div className="latest-vitals-box">
-                <p className="block-label" style={{ color: '#c14d4d' }}>CRITICAL</p>
-                <p className="latest-vitals-value">{patientDetail.vitals.systolic} / {patientDetail.vitals.diastolic}</p>
-                <p className="text-muted">{patientDetail.vitals.note}</p>
+    <ProtectedRoute requiredRole="health-worker">
+      <div className="app-shell">
+        <Sidebar />
+        <main className="content hcp-page">
+          <section className="patient-head-figma">
+            <div className="table-avatar patient-head-avatar">{patient.initials}</div>
+            <div>
+              <h1 className="patient-head-title">{patient.name}</h1>
+              <p className="text-muted" style={{ margin: '4px 0 0' }}>{patient.age} • {patient.condition} • Patient since {patient.joined || '2025'}</p>
+              <div className="patient-chip-row">
+                <span className="badge badge-critical">Status {patient.status}</span>
+                <span className="badge badge-caution">Adherence {patient.adherence}</span>
+                <span className="badge" style={{ background: '#f3efe8', color: '#525a67' }}>Assigned to you</span>
               </div>
             </div>
           </section>
-        )}
 
-        {activeTab === 'Readings' && (
-          <section className="panel hcp-panel">
-            <div className="readings-chart-box">
-              <svg viewBox="0 0 480 190" preserveAspectRatio="none" className="readings-chart-svg" aria-hidden="true">
-                <polyline fill="none" stroke="#f0aa62" strokeWidth="3" points="0,150 45,130 90,140 135,70 180,110 225,120 270,112 315,145 360,55 405,90 450,82 480,90" />
-              </svg>
-            </div>
-
-            <div className="reading-card">
-              <p><strong>BP {patientDetail.vitals.systolic} / {patientDetail.vitals.diastolic}</strong> <span className="status-pill status-critical">Critical</span></p>
-              <p className="text-muted">Today 07:42 • AI check-in</p>
-              <div className="reading-note-row">
-                <span className="filter-pill">Your reading looks good, keep it up.</span>
-                <span className="filter-pill">This reading needs monitoring, please check again tomorrow.</span>
-                <span className="filter-pill">This reading is concerning, please visit the facility as soon as possible.</span>
-              </div>
-            </div>
-
-            {patientDetail.readings.slice(1).map((item) => (
-              <div key={item.time} className="reading-mini-card">
-                <p><strong>BP {item.value}</strong></p>
-                <p className="text-muted">{item.time}</p>
-              </div>
+          <nav className="patient-tab-nav" aria-label="Patient tabs">
+            {tabs.map((tab) => (
+              <button key={tab} type="button" className={`patient-tab-btn ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>
+                {tab}
+              </button>
             ))}
-          </section>
-        )}
+          </nav>
 
-        {activeTab === 'Medication' && (
+          {activeTab === 'Overview' && (
+            <section className="patient-overview-grid">
+              <div className="panel hcp-panel">
+                <p className="panel-title">Patient details</p>
+                <div className="patient-kv-grid">
+                  <div>
+                    <p className="block-label">Full name</p>
+                    <p>{patient.name}</p>
+                  </div>
+                  <div>
+                    <p className="block-label">Age</p>
+                    <p>{patient.age}</p>
+                  </div>
+                  <div>
+                    <p className="block-label">Ghana Card</p>
+                    <p>{patient.ghanaCard || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="block-label">NHIS</p>
+                    <p>{patient.nhis || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="block-label">Conditions</p>
+                    <p>{patient.condition}</p>
+                  </div>
+                  <div>
+                    <p className="block-label">Registered</p>
+                    <p>{patient.joined || '2025'}</p>
+                  </div>
+                  <div>
+                    <p className="block-label">Facility</p>
+                    <p>{patient.facility || 'Kumasi South Hospital'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="panel hcp-panel">
+                <p className="panel-title">Latest vitals</p>
+                <div className="latest-vitals-box">
+                  <p className="block-label" style={{ color: '#c14d4d' }}>{patient.status.toUpperCase()}</p>
+                  <p className="latest-vitals-value">{latestVitalsLabel}</p>
+                  <p className="text-muted">{latestVital.note}</p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'Readings' && (
+            <section className="panel hcp-panel">
+              <div className="panel-headline-row" style={{ marginBottom: 12 }}>
+                <p className="panel-title">Record new vitals</p>
+              </div>
+
+              <form onSubmit={handleSaveVitals}>
+                <div className="onboarding-grid-two">
+                  <label>
+                    <span className="onboarding-field-label">Systolic (mmHg)</span>
+                    <input type="number" min={50} required value={systolic} onChange={(event) => setSystolic(event.target.value)} />
+                  </label>
+                  <label>
+                    <span className="onboarding-field-label">Diastolic (mmHg)</span>
+                    <input type="number" min={30} required value={diastolic} onChange={(event) => setDiastolic(event.target.value)} />
+                  </label>
+                </div>
+
+                <div className="onboarding-grid-two">
+                  <label>
+                    <span className="onboarding-field-label">Pulse (optional)</span>
+                    <input type="number" min={20} value={pulse} onChange={(event) => setPulse(event.target.value)} />
+                  </label>
+                  <label>
+                    <span className="onboarding-field-label">Temperature (optional)</span>
+                    <input type="number" min={30} step="0.1" value={temperature} onChange={(event) => setTemperature(event.target.value)} />
+                  </label>
+                </div>
+
+                <div className="onboarding-grid-two">
+                  <label>
+                    <span className="onboarding-field-label">Weight kg (optional)</span>
+                    <input type="number" min={1} step="0.1" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} />
+                  </label>
+                  <label>
+                    <span className="onboarding-field-label">Note</span>
+                    <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional note" />
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                  <button className="primary small" type="submit">Save vitals</button>
+                </div>
+              </form>
+
+              <div className="panel-headline-row" style={{ margin: '20px 0 12px' }}>
+                <p className="panel-title">Vital history</p>
+              </div>
+
+              <div className="reading-card">
+                <p><strong>BP {latestVitalsLabel}</strong> <span className={`status-pill status-${patient.status.toLowerCase()}`}>{patient.status}</span></p>
+                <p className="text-muted">{String(latestVital.takenAt)}</p>
+              </div>
+
+              {readingRows.slice(1).map((item) => (
+                <div key={item.id} className="reading-mini-card">
+                  <p><strong>BP {item.systolic} / {item.diastolic}</strong></p>
+                  <p className="text-muted">{String(item.takenAt)}</p>
+                </div>
+              ))}
+            </section>
+          )}
+
+          {activeTab === 'Medication' && (
           <section className="patient-overview-grid">
             <div className="panel hcp-panel">
               <div className="panel-headline-row">
@@ -143,7 +278,7 @@ export default function PatientDetailsPage() {
           </section>
         )}
 
-        {activeTab === 'Appointments' && (
+          {activeTab === 'Appointments' && (
           <section className="panel hcp-panel">
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
               <button className="primary small">+ New Appointment</button>
@@ -177,7 +312,7 @@ export default function PatientDetailsPage() {
           </section>
         )}
 
-        {activeTab === 'Chat' && (
+          {activeTab === 'Chat' && (
           <section className="panel hcp-panel patient-chat-box">
             <div className="message-list" style={{ padding: 8 }}>
               {patientDetail.messages.map((message, index) => (
@@ -194,7 +329,8 @@ export default function PatientDetailsPage() {
             </div>
           </section>
         )}
-      </main>
-    </div>
+        </main>
+      </div>
+    </ProtectedRoute>
   );
 }

@@ -9,14 +9,14 @@ export default function PharmacyChatsPage() {
   const [selectedThread, setSelectedThread] = useState(pharmacyChatThreads[0]);
 
   return (
-    <ProtectedRoute requiredRole="pharmacist">
+    <ProtectedRoute requiredRole="pharmacy">
       <div className="app-shell">
         <Sidebar />
         <main className="content hcp-page">
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Messages</h1>
-              <p className="subtitle">Communicate with doctors and patients.</p>
+              <p className="subtitle">Communicate with health workers and patients.</p>
             </div>
           </div>
 
