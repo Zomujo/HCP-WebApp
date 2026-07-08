@@ -21,10 +21,10 @@ export default function SignupPage() {
           <div className="auth-glow" />
           <div className="auth-brand">
             <div className="logo-mark">
-              <Image src="/logo.png" alt="YLIMA logo" width={40} height={40} />
+              <Image src="/logo.png" alt="YELIMA logo" width={40} height={40} />
             </div>
             <div>
-              <p className="auth-brand-title">YLIMA</p>
+              <p className="auth-brand-title">YELIMA</p>
               <p className="auth-brand-subtitle">HCP portal</p>
             </div>
           </div>
@@ -57,7 +57,7 @@ export default function SignupPage() {
           <form className="auth-fields" onSubmit={handleSubmit}>
             <label>
               <span className="block-label">Email</span>
-              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@ylima.health" />
+              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@yelima.health" />
             </label>
             <label>
               <span className="block-label">Password</span>

@@ -84,8 +84,8 @@ export default function OnboardingPage() {
     <main className="onboarding-page">
       <div className="onboarding-stage">
         <div className="onboarding-brand">
-          <Image src="/logo.png" alt="YLIMA logo" width={22} height={22} />
-          <span>YLIMA</span>
+          <Image src="/logo.png" alt="YELIMA logo" width={22} height={22} />
+          <span>YELIMA</span>
         </div>
 
         <section className="onboarding-shell compact">

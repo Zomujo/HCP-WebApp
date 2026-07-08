@@ -13,7 +13,7 @@ export default function LoginPage() {
     const email = data.get('email');
     const password = data.get('password');
 
-    if (email === 'user@ylima.health' && password === 'password123') {
+    if (email === 'user@yelima.health' && password === 'password123') {
       localStorage.setItem('hcp-auth-token', 'demo-token');
       localStorage.setItem('hcp-user-role', role);
       const redirectPath = role === 'doctor' ? '/dashboard' : '/pharmacy/dashboard';
@@ -21,7 +21,7 @@ export default function LoginPage() {
       return;
     }
 
-    alert('Invalid demo credentials. Use user@ylima.health / password123');
+    alert('Invalid demo credentials. Use user@yelima.health / password123');
   };
 
   return (
@@ -31,10 +31,10 @@ export default function LoginPage() {
           <div className="auth-glow" />
           <div className="auth-brand">
             <div className="logo-mark">
-              <Image src="/logo.png" alt="YLIMA logo" width={28} height={28} />
+              <Image src="/logo.png" alt="YELIMA logo" width={28} height={28} />
             </div>
             <div>
-              <p className="auth-brand-title">YLIMA</p>
+              <p className="auth-brand-title">YELIMA</p>
               <p className="auth-brand-subtitle">HCP portal</p>
             </div>
           </div>
@@ -72,7 +72,7 @@ export default function LoginPage() {
           <form className="auth-fields" onSubmit={handleSubmit}>
             <label>
               <span className="block-label">Email</span>
-              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@ylima.health" />
+              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@yelima.health" />
             </label>
             <label>
               <span className="block-label">Password</span>

@@ -32,10 +32,10 @@ export function Sidebar() {
       <div className="sidebar-header">
         <div className="sidebar-brand-row">
           <div className="logo-mark sidebar-logo-mark">
-            <Image src="/logo.png" alt="YLIMA logo" width={18} height={18} />
+            <Image src="/logo.png" alt="YELIMA logo" width={18} height={18} />
           </div>
           <div>
-            <p style={{ margin: 0, fontWeight: 700 }}>YLIMA</p>
+            <p style={{ margin: 0, fontWeight: 700 }}>YELIMA</p>
             <p className="text-muted" style={{ margin: 0, fontSize: '0.84rem' }}>{roleLabel}</p>
           </div>
         </div>

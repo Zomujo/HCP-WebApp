@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'YLIMA HCP Portal',
+  title: 'YELIMA HCP Portal',
   description: 'Healthcare platform for chronic care management',
 };
 
