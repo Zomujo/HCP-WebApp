@@ -10,6 +10,33 @@ import { ProtectedRoute } from '../../components/ProtectedRoute';
 const tabs = ['Overview', 'Readings', 'Medication', 'Appointments', 'Chat'] as const;
 type TabName = (typeof tabs)[number];
 
+const CHART_WIDTH = 760;
+const CHART_HEIGHT = 220;
+const CHART_PADDING = { top: 18, right: 24, bottom: 32, left: 42 };
+
+function formatVitalTime(value?: string): string {
+  if (!value || typeof value !== 'string') {
+    return 'Unknown time';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatVitalDateLabel(value?: string): string {
+  const formatted = formatVitalTime(value);
+  return formatted.includes(',') ? formatted.split(',')[0] : formatted;
+}
+
 const fallbackPatient: PatientRecord = {
   id: 'akua-mensah',
   name: patientDetail.name,
@@ -72,26 +99,63 @@ export default function PatientDetailsPage() {
     setVitals(getVitalsForPatient(patientId));
   }, [patientId]);
 
-  const latestVital = vitals[0] || {
+  const readingRows = useMemo(() => {
+    if (vitals.length) {
+      return vitals;
+    }
+
+    return patientDetail.readings.map((reading, index) => {
+      const parts = reading.value.split('/').map((value) => Number(value.trim()));
+      return {
+        id: `fallback-${index}`,
+        patientId: patient.id,
+        systolic: parts[0],
+        diastolic: parts[1],
+        pulse: undefined,
+        temperature: undefined,
+        weightKg: undefined,
+        note: reading.note,
+        takenAt: reading.time,
+      };
+    });
+  }, [patient.id, vitals]);
+
+  const latestVital = readingRows[0] || {
+    id: 'fallback-latest',
+    patientId: patient.id,
     systolic: patientDetail.vitals.systolic,
     diastolic: patientDetail.vitals.diastolic,
+    pulse: undefined,
+    temperature: undefined,
+    weightKg: undefined,
     note: patientDetail.vitals.note,
     takenAt: new Date().toISOString(),
   };
 
-  const readingRows = vitals.length
-    ? vitals
-    : patientDetail.readings.map((reading, index) => {
-        const parts = reading.value.split('/').map((value) => Number(value.trim()));
-        return {
-          id: `fallback-${index}`,
-          patientId: patient.id,
-          systolic: parts[0],
-          diastolic: parts[1],
-          note: reading.note,
-          takenAt: reading.time,
-        };
-      });
+  const chartRows = [...readingRows].reverse().slice(-10);
+  const chartSeriesValues = chartRows.flatMap((row) => [row.systolic, row.diastolic]);
+  const measuredMin = chartSeriesValues.length ? Math.min(...chartSeriesValues) : 60;
+  const measuredMax = chartSeriesValues.length ? Math.max(...chartSeriesValues) : 180;
+  const chartMin = Math.max(40, Math.floor((measuredMin - 20) / 10) * 10);
+  const chartMax = Math.max(chartMin + 40, Math.ceil((measuredMax + 20) / 10) * 10);
+  const chartInnerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
+  const chartInnerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
+
+  const getY = (value: number) => {
+    const ratio = (value - chartMin) / (chartMax - chartMin);
+    return CHART_HEIGHT - CHART_PADDING.bottom - ratio * chartInnerHeight;
+  };
+
+  const getX = (index: number) => {
+    if (chartRows.length <= 1) {
+      return CHART_PADDING.left + chartInnerWidth / 2;
+    }
+    const step = chartInnerWidth / (chartRows.length - 1);
+    return CHART_PADDING.left + index * step;
+  };
+
+  const systolicPoints = chartRows.map((row, index) => `${getX(index)},${getY(row.systolic)}`).join(' ');
+  const diastolicPoints = chartRows.map((row, index) => `${getX(index)},${getY(row.diastolic)}`).join(' ');
 
   const handleSaveVitals = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -127,6 +191,9 @@ export default function PatientDetailsPage() {
   };
 
   const latestVitalsLabel = `${latestVital.systolic} / ${latestVital.diastolic}`;
+  const latestPulseLabel = latestVital.pulse ? `${latestVital.pulse} bpm` : '--';
+  const latestTemperatureLabel = latestVital.temperature ? `${latestVital.temperature.toFixed(1)} °C` : '--';
+  const latestWeightLabel = latestVital.weightKg ? `${latestVital.weightKg.toFixed(1)} kg` : '--';
 
   const handleSaveDetails = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -304,6 +371,20 @@ export default function PatientDetailsPage() {
                   <p className="block-label" style={{ color: '#c14d4d' }}>{patient.status.toUpperCase()}</p>
                   <p className="latest-vitals-value">{latestVitalsLabel}</p>
                   <p className="text-muted">{latestVital.note}</p>
+                  <div className="latest-vitals-meta-grid">
+                    <div>
+                      <p className="block-label">Pulse</p>
+                      <p>{latestPulseLabel}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Temperature</p>
+                      <p>{latestTemperatureLabel}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Weight</p>
+                      <p>{latestWeightLabel}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -311,6 +392,45 @@ export default function PatientDetailsPage() {
 
           {activeTab === 'Readings' && (
             <section className="panel hcp-panel">
+              <div className="readings-chart-box">
+                <div className="panel-headline-row" style={{ marginBottom: 8 }}>
+                  <p className="panel-title" style={{ margin: 0 }}>Blood pressure trend</p>
+                  <div className="readings-legend-row">
+                    <span className="readings-legend-item"><i className="legend-dot systolic" />Systolic</span>
+                    <span className="readings-legend-item"><i className="legend-dot diastolic" />Diastolic</span>
+                  </div>
+                </div>
+
+                <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" className="readings-chart-svg" aria-label="Blood pressure trend chart">
+                  {[0, 1, 2, 3, 4].map((tick) => {
+                    const y = CHART_PADDING.top + (chartInnerHeight / 4) * tick;
+                    const value = Math.round(chartMax - ((chartMax - chartMin) / 4) * tick);
+                    return (
+                      <g key={tick}>
+                        <line x1={CHART_PADDING.left} y1={y} x2={CHART_WIDTH - CHART_PADDING.right} y2={y} className="chart-grid-line" />
+                        <text x={8} y={y + 4} className="chart-axis-text">{value}</text>
+                      </g>
+                    );
+                  })}
+
+                  {chartRows.map((row, index) => (
+                    <text key={row.id} x={getX(index)} y={CHART_HEIGHT - 10} textAnchor="middle" className="chart-axis-text">
+                      {formatVitalDateLabel(row.takenAt)}
+                    </text>
+                  ))}
+
+                  <polyline points={diastolicPoints} className="chart-line-diastolic" />
+                  <polyline points={systolicPoints} className="chart-line-systolic" />
+
+                  {chartRows.map((row, index) => (
+                    <g key={`dot-${row.id}`}>
+                      <circle cx={getX(index)} cy={getY(row.systolic)} r={3.5} className="chart-dot-systolic" />
+                      <circle cx={getX(index)} cy={getY(row.diastolic)} r={3.5} className="chart-dot-diastolic" />
+                    </g>
+                  ))}
+                </svg>
+              </div>
+
               <div className="panel-headline-row" style={{ marginBottom: 12 }}>
                 <p className="panel-title">Record new vitals</p>
               </div>
@@ -360,13 +480,23 @@ export default function PatientDetailsPage() {
 
               <div className="reading-card">
                 <p><strong>BP {latestVitalsLabel}</strong> <span className={`status-pill status-${patient.status.toLowerCase()}`}>{patient.status}</span></p>
-                <p className="text-muted">{String(latestVital.takenAt)}</p>
+                <p className="text-muted">{formatVitalTime(String(latestVital.takenAt))}</p>
+                <div className="vitals-inline-list">
+                  <span>Pulse: {latestPulseLabel}</span>
+                  <span>Temp: {latestTemperatureLabel}</span>
+                  <span>Weight: {latestWeightLabel}</span>
+                </div>
               </div>
 
               {readingRows.slice(1).map((item) => (
                 <div key={item.id} className="reading-mini-card">
                   <p><strong>BP {item.systolic} / {item.diastolic}</strong></p>
-                  <p className="text-muted">{String(item.takenAt)}</p>
+                  <p className="text-muted">{formatVitalTime(String(item.takenAt))}</p>
+                  <div className="vitals-inline-list">
+                    <span>Pulse: {item.pulse ? `${item.pulse} bpm` : '--'}</span>
+                    <span>Temp: {item.temperature ? `${item.temperature.toFixed(1)} °C` : '--'}</span>
+                    <span>Weight: {item.weightKg ? `${item.weightKg.toFixed(1)} kg` : '--'}</span>
+                  </div>
                 </div>
               ))}
             </section>

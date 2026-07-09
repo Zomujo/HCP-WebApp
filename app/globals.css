@@ -1409,6 +1409,19 @@ button.small {
   padding: 14px;
 }
 
+.latest-vitals-meta-grid {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.latest-vitals-meta-grid p {
+  margin: 2px 0 0;
+  font-size: 0.87rem;
+  font-weight: 700;
+}
+
 .latest-vitals-value {
   margin: 8px 0;
   font-size: 3rem;
@@ -1421,11 +1434,75 @@ button.small {
   border-radius: 10px;
   padding: 12px;
   margin-bottom: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #fffaf2 100%);
 }
 
 .readings-chart-svg {
   width: 100%;
   height: 190px;
+}
+
+.readings-legend-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.74rem;
+  color: #6b7483;
+}
+
+.readings-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  display: inline-block;
+}
+
+.legend-dot.systolic {
+  background: #ef9a4c;
+}
+
+.legend-dot.diastolic {
+  background: #47586f;
+}
+
+.chart-grid-line {
+  stroke: #e8edf4;
+  stroke-width: 1;
+}
+
+.chart-axis-text {
+  fill: #8a93a2;
+  font-size: 10px;
+}
+
+.chart-line-systolic {
+  fill: none;
+  stroke: #ef9a4c;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-line-diastolic {
+  fill: none;
+  stroke: #47586f;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart-dot-systolic {
+  fill: #ef9a4c;
+}
+
+.chart-dot-diastolic {
+  fill: #47586f;
 }
 
 .reading-card {
@@ -1437,6 +1514,22 @@ button.small {
 
 .reading-card p {
   margin: 0 0 6px;
+}
+
+.vitals-inline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.vitals-inline-list span {
+  border: 1px solid #e0e6ef;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  color: #5f6b7b;
+  background: #fbfcff;
 }
 
 .reading-note-row {
