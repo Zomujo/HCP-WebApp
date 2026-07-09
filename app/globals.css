@@ -1413,13 +1413,21 @@ button.small {
   margin-top: 10px;
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
 }
 
 .latest-vitals-meta-grid p {
   margin: 2px 0 0;
   font-size: 0.87rem;
   font-weight: 700;
+}
+
+.latest-vitals-meta-grid .block-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  font-size: 0.68rem;
 }
 
 .latest-vitals-value {
@@ -2064,5 +2072,465 @@ button.small {
 
   .hero-copy {
     font-size: 1.05rem;
+  }
+}
+
+/* Mobile usability overrides (kept at end for priority) */
+@media (max-width: 768px) {
+  .app-shell {
+    display: block;
+    min-height: 100vh;
+  }
+
+  .hcp-sidebar {
+    width: 100%;
+    margin: 0;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: 1px solid #d4d8e2;
+    background: #f5f2eb;
+    gap: 10px;
+  }
+
+  .sidebar-header {
+    gap: 8px;
+  }
+
+  .sidebar-brand-row {
+    gap: 8px;
+  }
+
+  .sidebar-brand-row p {
+    line-height: 1.2;
+  }
+
+  .hcp-sidebar nav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-link {
+    flex: 0 0 auto;
+    min-width: 104px;
+    text-align: center;
+    padding: 10px 10px;
+    font-size: 0.84rem;
+    margin-bottom: 0;
+  }
+
+  .sidebar-footer {
+    display: none;
+  }
+
+  .content.hcp-page {
+    padding: 14px;
+  }
+
+  .hcp-page-title {
+    font-size: 1.55rem;
+    line-height: 1.15;
+  }
+
+  .patient-head-figma {
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .patient-head-avatar {
+    width: 42px;
+    height: 42px;
+    font-size: 1rem;
+  }
+
+  .patient-head-title {
+    font-size: 1.5rem;
+    line-height: 1.08;
+  }
+
+  .patient-chip-row .badge {
+    padding: 5px 10px;
+    font-size: 0.74rem;
+  }
+
+  .patient-tab-nav {
+    gap: 6px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .patient-tab-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 9px 2px;
+    font-size: 0.9rem;
+  }
+
+  .panel.hcp-panel {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
+  .patient-overview-grid,
+  .patient-kv-grid,
+  .onboarding-grid-two,
+  .stats-row-figma,
+  .pharmacy-chat-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .latest-vitals-value {
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .latest-vitals-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .readings-chart-svg {
+    height: 180px;
+  }
+
+  .chart-axis-text {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 420px) {
+  .content.hcp-page {
+    padding: 12px;
+  }
+
+  .hcp-page-title {
+    font-size: 1.38rem;
+  }
+
+  .patient-head-title {
+    font-size: 1.35rem;
+  }
+
+  .patient-chip-row {
+    gap: 6px;
+  }
+
+  .patient-chip-row .badge {
+    padding: 4px 8px;
+    font-size: 0.7rem;
+  }
+
+  .patient-tab-btn {
+    font-size: 0.84rem;
+    padding: 8px 2px;
+  }
+
+  .readings-chart-svg {
+    height: 165px;
+  }
+
+  .vitals-inline-list span {
+    font-size: 0.7rem;
+    padding: 4px 8px;
+  }
+
+  .nav-link {
+    min-width: 96px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Responsive hardening for all core screens */
+html,
+body {
+  overflow-x: hidden;
+}
+
+.pharmacy-chat-layout {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.pharmacy-chat-list-panel {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.pharmacy-chat-list-title {
+  margin-bottom: 12px;
+}
+
+.pharmacy-chat-thread-item {
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-left-color 0.16s ease;
+}
+
+.pharmacy-chat-thread-item.active {
+  background-color: #f0f7ff;
+  border-left: 3px solid #0066cc;
+  padding-left: 9px;
+}
+
+.pharmacy-chat-thread-name {
+  margin: 0 0 4px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.pharmacy-chat-thread-preview {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pharmacy-chat-thread-time {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #999;
+}
+
+.pharmacy-chat-main-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 480px;
+}
+
+.pharmacy-chat-main-header {
+  border-bottom: 1px solid #e0e0e0;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.pharmacy-chat-main-title {
+  margin: 0;
+}
+
+.pharmacy-chat-main-messages {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.pharmacy-chat-bubble {
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.pharmacy-chat-bubble.from {
+  background-color: #f5f5f5;
+}
+
+.pharmacy-chat-bubble.to {
+  background-color: #e8f4f8;
+  margin-left: auto;
+  max-width: 70%;
+}
+
+.pharmacy-chat-bubble-author {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #666;
+}
+
+.pharmacy-chat-bubble-author.you {
+  color: #0066cc;
+}
+
+.pharmacy-chat-bubble-text {
+  margin: 0;
+  font-size: 14px;
+}
+
+.pharmacy-chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.pharmacy-chat-input-row input {
+  flex: 1;
+}
+
+.pharmacy-chat-input-row .primary {
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .hcp-page {
+    width: 100%;
+  }
+
+  .hcp-table {
+    min-width: 680px;
+  }
+}
+
+@media (max-width: 960px) {
+  .panel.hcp-panel {
+    padding: 12px;
+  }
+
+  .patient-head-figma {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .patient-tab-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+  }
+
+  .patient-tab-btn {
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  .latest-vitals-meta-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .readings-legend-row {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+
+  .pharmacy-chat-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .pharmacy-chat-list-panel {
+    max-height: 340px;
+  }
+}
+
+@media (max-width: 640px) {
+  .hcp-page-title {
+    font-size: 1.45rem;
+  }
+
+  .patient-head-title {
+    font-size: 1.4rem;
+    line-height: 1.1;
+  }
+
+  .patient-head-avatar {
+    width: 42px;
+    height: 42px;
+    font-size: 1.05rem;
+  }
+
+  .latest-vitals-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vitals-inline-list {
+    gap: 6px;
+  }
+
+  .vitals-inline-list span {
+    font-size: 0.72rem;
+    padding: 4px 8px;
+  }
+
+  .hcp-table {
+    min-width: 560px;
+  }
+
+  .chart-axis-text {
+    font-size: 9px;
+  }
+
+  .pharmacy-chat-bubble.to {
+    max-width: 86%;
+  }
+
+  .pharmacy-chat-input-row {
+    flex-direction: column;
+  }
+
+  .pharmacy-chat-input-row .primary {
+    width: 100%;
+  }
+}
+
+/* Sidebar mobile drawer overrides */
+.sidebar-mobile-toggle {
+  display: none;
+}
+
+.sidebar-collapsible {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+@media (max-width: 768px) {
+  .sidebar-mobile-toggle {
+    display: inline-flex;
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+    border: 1px solid #d5d9e3;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #4d5665;
+    font-weight: 700;
+    font-size: 0.82rem;
+    padding: 8px 10px;
+  }
+
+  .sidebar-collapsible {
+    display: none;
+    margin-top: 8px;
+  }
+
+  .sidebar-collapsible.open {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sidebar-collapsible nav {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .sidebar-collapsible .nav-link {
+    min-width: 0;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    margin-bottom: 0;
+  }
+
+  .sidebar-collapsible .sidebar-footer {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    border-top: 1px solid #d6dae4;
+    padding-top: 8px;
   }
 }

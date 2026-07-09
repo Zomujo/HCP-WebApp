@@ -10,11 +10,16 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [userRole, setUserRole] = useState<'health-worker' | 'pharmacy' | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const role = localStorage.getItem('hcp-user-role') as 'health-worker' | 'pharmacy' | null;
     setUserRole(role);
   }, []);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   const handleLogout = () => {
     localStorage.removeItem('hcp-auth-token');
@@ -39,27 +44,40 @@ export function Sidebar() {
             <p className="text-muted" style={{ margin: 0, fontSize: '0.84rem' }}>{roleLabel}</p>
           </div>
         </div>
+
+        <button
+          type="button"
+          className="sidebar-mobile-toggle"
+          onClick={() => setIsMobileMenuOpen((previous) => !previous)}
+          aria-expanded={isMobileMenuOpen}
+          aria-controls="sidebar-mobile-collapsible"
+        >
+          {isMobileMenuOpen ? 'Close' : 'Menu'}
+        </button>
       </div>
 
-      <nav>
-        {navItems.map((item) => (
-          <Link key={item.href} href={item.href} className={`nav-link ${pathname === item.href ? 'active' : ''}`}>
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+      <div id="sidebar-mobile-collapsible" className={`sidebar-collapsible ${isMobileMenuOpen ? 'open' : ''}`}>
+        <nav>
+          {navItems.map((item) => (
+            <Link key={item.href} href={item.href} className={`nav-link ${pathname === item.href ? 'active' : ''}`}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
 
-      <div className="sidebar-footer">
-        <div className="patient-pill">
-          <div className="avatar-badge">{userName[0]}</div>
-          <div>
-            <p style={{ margin: 0, fontWeight: 700 }}>{userName}</p>
-            <p className="text-muted" style={{ margin: 0, fontSize: '0.9rem' }}>{facilityName}</p>
+        <div className="sidebar-footer">
+          <div className="patient-pill">
+            <div className="avatar-badge">{userName[0]}</div>
+            <div>
+              <p style={{ margin: 0, fontWeight: 700 }}>{userName}</p>
+              <p className="text-muted" style={{ margin: 0, fontSize: '0.9rem' }}>{facilityName}</p>
+            </div>
           </div>
+
+          <button type="button" className="ghost small" onClick={handleLogout}>
+            Logout
+          </button>
         </div>
-        <button type="button" className="ghost small" onClick={handleLogout}>
-          Logout
-        </button>
       </div>
     </aside>
   );
