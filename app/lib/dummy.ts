@@ -29,7 +29,7 @@ export const patientList = [
 ];
 
 export const dashboardStats = [
-  { label: 'Total Patients', value: '1,240' },
+  { label: 'Total Patients', value: '70' },
   { label: 'Critical Readings', value: '8' },
   { label: 'Silent Patients', value: '4' },
 ];
@@ -82,10 +82,10 @@ export const patientDetail = {
   ],
   readings: [
     { value: '168 / 102', note: 'Critical', time: 'Today 07:42' },
-    { value: '161 / 98', note: 'Yesterday 09:42' },
-    { value: '152 / 94', note: 'Wednesday 11:25' },
-    { value: '145 / 91', note: 'Tuesday 08:14' },
-    { value: '138 / 86', note: 'Today 03:27' },
+    { value: '149 / 92', note: 'Yesterday 09:42' },
+    { value: '162 / 99', note: 'Wednesday 11:25' },
+    { value: '141 / 88', note: 'Tuesday 08:14' },
+    { value: '156 / 95', note: 'Today 03:27' },
   ],
   messages: [
     { type: 'from', text: 'Good morning. I took my tablet but my head is heavy.', time: '08:14' },

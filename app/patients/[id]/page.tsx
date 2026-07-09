@@ -6,13 +6,33 @@ import { Sidebar } from '../../components/Sidebar';
 import { patientDetail } from '../../lib/dummy';
 import { addVital, getPatientById, getVitalsForPatient, PatientRecord, updatePatientDetails, VitalEntry } from '../../lib/patientStore';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const tabs = ['Overview', 'Readings', 'Medication', 'Appointments', 'Chat'] as const;
 type TabName = (typeof tabs)[number];
+type ChartMetric = 'bp' | 'pulse' | 'temperature' | 'weight';
 
-const CHART_WIDTH = 760;
-const CHART_HEIGHT = 220;
-const CHART_PADDING = { top: 18, right: 24, bottom: 32, left: 42 };
+const metricLabels: Record<ChartMetric, string> = {
+  bp: 'Blood pressure trend',
+  pulse: 'Pulse trend',
+  temperature: 'Temperature trend',
+  weight: 'Weight trend',
+};
+
+const metricUnits: Record<ChartMetric, string> = {
+  bp: 'mmHg',
+  pulse: 'bpm',
+  temperature: '°C',
+  weight: 'kg',
+};
+
+const fallbackPulseSeries = [92, 76, 88, 72, 90];
+const fallbackTemperatureSeries = [36.9, 36.6, 37.1, 36.7, 37.0];
+const fallbackWeightSeries = [72.4, 72.1, 72.7, 72.0, 72.5];
+
+function formatMetricNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
 
 function formatVitalTime(value?: string): string {
   if (!value || typeof value !== 'string') {
@@ -71,6 +91,7 @@ export default function PatientDetailsPage() {
   const [temperature, setTemperature] = useState('');
   const [weightKg, setWeightKg] = useState('');
   const [note, setNote] = useState('');
+  const [activeChartMetric, setActiveChartMetric] = useState<ChartMetric>('bp');
 
   useEffect(() => {
     if (!patientId) {
@@ -111,9 +132,9 @@ export default function PatientDetailsPage() {
         patientId: patient.id,
         systolic: parts[0],
         diastolic: parts[1],
-        pulse: undefined,
-        temperature: undefined,
-        weightKg: undefined,
+        pulse: fallbackPulseSeries[index] ?? undefined,
+        temperature: fallbackTemperatureSeries[index] ?? undefined,
+        weightKg: fallbackWeightSeries[index] ?? undefined,
         note: reading.note,
         takenAt: reading.time,
       };
@@ -133,29 +154,111 @@ export default function PatientDetailsPage() {
   };
 
   const chartRows = [...readingRows].reverse().slice(-10);
-  const chartSeriesValues = chartRows.flatMap((row) => [row.systolic, row.diastolic]);
-  const measuredMin = chartSeriesValues.length ? Math.min(...chartSeriesValues) : 60;
-  const measuredMax = chartSeriesValues.length ? Math.max(...chartSeriesValues) : 180;
-  const chartMin = Math.max(40, Math.floor((measuredMin - 20) / 10) * 10);
-  const chartMax = Math.max(chartMin + 40, Math.ceil((measuredMax + 20) / 10) * 10);
-  const chartInnerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
-  const chartInnerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
+  const chartSeriesValues =
+    activeChartMetric === 'bp'
+      ? chartRows.flatMap((row) => [row.systolic, row.diastolic])
+      : chartRows
+          .map((row) => {
+            if (activeChartMetric === 'pulse') {
+              return row.pulse;
+            }
+            if (activeChartMetric === 'temperature') {
+              return row.temperature;
+            }
+            return row.weightKg;
+          })
+          .filter((value): value is number => typeof value === 'number');
 
-  const getY = (value: number) => {
-    const ratio = (value - chartMin) / (chartMax - chartMin);
-    return CHART_HEIGHT - CHART_PADDING.bottom - ratio * chartInnerHeight;
+  const defaultDomains: Record<ChartMetric, [number, number]> = {
+    bp: [40, 220],
+    pulse: [40, 140],
+    temperature: [34, 41],
+    weight: [35, 130],
   };
 
-  const getX = (index: number) => {
-    if (chartRows.length <= 1) {
-      return CHART_PADDING.left + chartInnerWidth / 2;
+  const domainPadding: Record<ChartMetric, number> = {
+    bp: 20,
+    pulse: 10,
+    temperature: 1,
+    weight: 5,
+  };
+
+  const fallbackDomain = defaultDomains[activeChartMetric];
+  const measuredMin = chartSeriesValues.length ? Math.min(...chartSeriesValues) : fallbackDomain[0];
+  const measuredMax = chartSeriesValues.length ? Math.max(...chartSeriesValues) : fallbackDomain[1];
+  const pad = domainPadding[activeChartMetric];
+  const chartMin = Math.max(0, Math.floor((measuredMin - pad) * 10) / 10);
+  const chartMax = Math.max(chartMin + 1, Math.ceil((measuredMax + pad) * 10) / 10);
+
+  const chartData = chartRows.map((row) => ({
+    id: row.id,
+    label: formatVitalDateLabel(row.takenAt),
+    systolic: row.systolic,
+    diastolic: row.diastolic,
+    pulse: row.pulse ?? null,
+    temperature: row.temperature ?? null,
+    weight: row.weightKg ?? null,
+  }));
+
+  const bpSummary = useMemo(() => {
+    if (!chartRows.length) {
+      return {
+        latest: '--',
+        average: '--',
+        minimum: '--',
+        maximum: '--',
+      };
     }
-    const step = chartInnerWidth / (chartRows.length - 1);
-    return CHART_PADDING.left + index * step;
-  };
 
-  const systolicPoints = chartRows.map((row, index) => `${getX(index)},${getY(row.systolic)}`).join(' ');
-  const diastolicPoints = chartRows.map((row, index) => `${getX(index)},${getY(row.diastolic)}`).join(' ');
+    const systolicValues = chartRows.map((row) => row.systolic);
+    const diastolicValues = chartRows.map((row) => row.diastolic);
+
+    const avgSys = systolicValues.reduce((sum, value) => sum + value, 0) / systolicValues.length;
+    const avgDia = diastolicValues.reduce((sum, value) => sum + value, 0) / diastolicValues.length;
+
+    return {
+      latest: `${chartRows[chartRows.length - 1].systolic} / ${chartRows[chartRows.length - 1].diastolic} ${metricUnits.bp}`,
+      average: `${formatMetricNumber(avgSys)} / ${formatMetricNumber(avgDia)} ${metricUnits.bp}`,
+      minimum: `${Math.min(...systolicValues)} / ${Math.min(...diastolicValues)} ${metricUnits.bp}`,
+      maximum: `${Math.max(...systolicValues)} / ${Math.max(...diastolicValues)} ${metricUnits.bp}`,
+    };
+  }, [chartRows]);
+
+  const singleMetricSummary = useMemo(() => {
+    const values = chartRows
+      .map((row) => {
+        if (activeChartMetric === 'pulse') {
+          return row.pulse;
+        }
+
+        if (activeChartMetric === 'temperature') {
+          return row.temperature;
+        }
+
+        return row.weightKg;
+      })
+      .filter((value): value is number => typeof value === 'number');
+
+    if (!values.length) {
+      return {
+        latest: '--',
+        average: '--',
+        minimum: '--',
+        maximum: '--',
+      };
+    }
+
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+
+    return {
+      latest: `${formatMetricNumber(values[values.length - 1])} ${metricUnits[activeChartMetric]}`,
+      average: `${formatMetricNumber(average)} ${metricUnits[activeChartMetric]}`,
+      minimum: `${formatMetricNumber(Math.min(...values))} ${metricUnits[activeChartMetric]}`,
+      maximum: `${formatMetricNumber(Math.max(...values))} ${metricUnits[activeChartMetric]}`,
+    };
+  }, [activeChartMetric, chartRows]);
+
+  const activeSummary = activeChartMetric === 'bp' ? bpSummary : singleMetricSummary;
 
   const handleSaveVitals = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -394,41 +497,90 @@ export default function PatientDetailsPage() {
             <section className="panel hcp-panel">
               <div className="readings-chart-box">
                 <div className="panel-headline-row" style={{ marginBottom: 8 }}>
-                  <p className="panel-title" style={{ margin: 0 }}>Blood pressure trend</p>
-                  <div className="readings-legend-row">
-                    <span className="readings-legend-item"><i className="legend-dot systolic" />Systolic</span>
-                    <span className="readings-legend-item"><i className="legend-dot diastolic" />Diastolic</span>
+                  <p className="panel-title" style={{ margin: 0 }}>{metricLabels[activeChartMetric]}</p>
+                </div>
+
+                <div className="metric-summary-grid">
+                  <div className="metric-summary-card">
+                    <p className="block-label">Latest</p>
+                    <p>{activeSummary.latest}</p>
+                  </div>
+                  <div className="metric-summary-card">
+                    <p className="block-label">Average</p>
+                    <p>{activeSummary.average}</p>
+                  </div>
+                  <div className="metric-summary-card">
+                    <p className="block-label">Min</p>
+                    <p>{activeSummary.minimum}</p>
+                  </div>
+                  <div className="metric-summary-card">
+                    <p className="block-label">Max</p>
+                    <p>{activeSummary.maximum}</p>
                   </div>
                 </div>
 
-                <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} preserveAspectRatio="none" className="readings-chart-svg" aria-label="Blood pressure trend chart">
-                  {[0, 1, 2, 3, 4].map((tick) => {
-                    const y = CHART_PADDING.top + (chartInnerHeight / 4) * tick;
-                    const value = Math.round(chartMax - ((chartMax - chartMin) / 4) * tick);
-                    return (
-                      <g key={tick}>
-                        <line x1={CHART_PADDING.left} y1={y} x2={CHART_WIDTH - CHART_PADDING.right} y2={y} className="chart-grid-line" />
-                        <text x={8} y={y + 4} className="chart-axis-text">{value}</text>
-                      </g>
-                    );
-                  })}
+                <div className="metric-toggle-row" role="tablist" aria-label="Vitals chart metric">
+                  <button type="button" className={`metric-toggle-btn ${activeChartMetric === 'bp' ? 'active' : ''}`} onClick={() => setActiveChartMetric('bp')}>
+                    BP
+                  </button>
+                  <button type="button" className={`metric-toggle-btn ${activeChartMetric === 'pulse' ? 'active' : ''}`} onClick={() => setActiveChartMetric('pulse')}>
+                    Pulse
+                  </button>
+                  <button type="button" className={`metric-toggle-btn ${activeChartMetric === 'temperature' ? 'active' : ''}`} onClick={() => setActiveChartMetric('temperature')}>
+                    Temperature
+                  </button>
+                  <button type="button" className={`metric-toggle-btn ${activeChartMetric === 'weight' ? 'active' : ''}`} onClick={() => setActiveChartMetric('weight')}>
+                    Weight
+                  </button>
+                </div>
 
-                  {chartRows.map((row, index) => (
-                    <text key={row.id} x={getX(index)} y={CHART_HEIGHT - 10} textAnchor="middle" className="chart-axis-text">
-                      {formatVitalDateLabel(row.takenAt)}
-                    </text>
-                  ))}
+                <div className="readings-chart-inner" aria-label="Blood pressure trend chart">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={chartData} margin={{ top: 8, right: 18, left: 4, bottom: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e8edf4" />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: '#8a93a2', fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={{ stroke: '#dbe2ea' }}
+                        minTickGap={20}
+                      />
+                      <YAxis
+                        domain={[chartMin, chartMax]}
+                        tick={{ fill: '#8a93a2', fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={{ stroke: '#dbe2ea' }}
+                        width={34}
+                        unit={metricUnits[activeChartMetric]}
+                      />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 10, borderColor: '#e0e6ef' }}
+                        labelStyle={{ color: '#374151', fontWeight: 700 }}
+                        formatter={(value) => `${value} ${metricUnits[activeChartMetric]}`}
+                      />
+                      {activeChartMetric === 'bp' ? <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: 8 }} /> : null}
 
-                  <polyline points={diastolicPoints} className="chart-line-diastolic" />
-                  <polyline points={systolicPoints} className="chart-line-systolic" />
+                      {activeChartMetric === 'bp' ? (
+                        <>
+                          <Line type="natural" dataKey="systolic" name="Systolic" stroke="#ef9a4c" strokeWidth={2.5} dot={{ r: 3.5 }} activeDot={{ r: 5 }} />
+                          <Line type="natural" dataKey="diastolic" name="Diastolic" stroke="#47586f" strokeWidth={2.2} dot={{ r: 3.5 }} activeDot={{ r: 5 }} />
+                        </>
+                      ) : null}
 
-                  {chartRows.map((row, index) => (
-                    <g key={`dot-${row.id}`}>
-                      <circle cx={getX(index)} cy={getY(row.systolic)} r={3.5} className="chart-dot-systolic" />
-                      <circle cx={getX(index)} cy={getY(row.diastolic)} r={3.5} className="chart-dot-diastolic" />
-                    </g>
-                  ))}
-                </svg>
+                      {activeChartMetric === 'pulse' ? (
+                        <Line type="natural" dataKey="pulse" name="Pulse" stroke="#2f7f47" strokeWidth={2.4} dot={{ r: 3.5 }} activeDot={{ r: 5 }} connectNulls />
+                      ) : null}
+
+                      {activeChartMetric === 'temperature' ? (
+                        <Line type="natural" dataKey="temperature" name="Temperature" stroke="#b85d3d" strokeWidth={2.4} dot={{ r: 3.5 }} activeDot={{ r: 5 }} connectNulls />
+                      ) : null}
+
+                      {activeChartMetric === 'weight' ? (
+                        <Line type="natural" dataKey="weight" name="Weight" stroke="#5b4f9d" strokeWidth={2.4} dot={{ r: 3.5 }} activeDot={{ r: 5 }} connectNulls />
+                      ) : null}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
 
               <div className="panel-headline-row" style={{ marginBottom: 12 }}>

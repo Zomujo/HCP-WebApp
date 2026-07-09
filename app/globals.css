@@ -1445,9 +1445,54 @@ button.small {
   background: linear-gradient(180deg, #ffffff 0%, #fffaf2 100%);
 }
 
-.readings-chart-svg {
+.readings-chart-inner {
   width: 100%;
-  height: 190px;
+  height: 240px;
+}
+
+.metric-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.metric-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.metric-summary-card {
+  border: 1px solid #e0e6ef;
+  border-radius: 10px;
+  background: #fffdf8;
+  padding: 8px 10px;
+}
+
+.metric-summary-card p {
+  margin: 3px 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #394453;
+}
+
+.metric-toggle-btn {
+  border: 1px solid #dbe2ea;
+  background: #ffffff;
+  color: #5f6b7b;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  line-height: 1;
+}
+
+.metric-toggle-btn.active {
+  background: #f4b86f;
+  border-color: #f4b86f;
+  color: #ffffff;
 }
 
 .readings-legend-row {
@@ -2195,8 +2240,17 @@ button.small {
     grid-template-columns: 1fr;
   }
 
-  .readings-chart-svg {
+  .readings-chart-inner {
     height: 180px;
+  }
+
+  .metric-toggle-btn {
+    font-size: 0.74rem;
+    padding: 6px 10px;
+  }
+
+  .metric-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .chart-axis-text {
@@ -2231,8 +2285,21 @@ button.small {
     padding: 8px 2px;
   }
 
-  .readings-chart-svg {
+  .readings-chart-inner {
     height: 165px;
+  }
+
+  .metric-toggle-row {
+    gap: 6px;
+  }
+
+  .metric-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-toggle-btn {
+    padding: 5px 9px;
+    font-size: 0.72rem;
   }
 
   .vitals-inline-list span {
