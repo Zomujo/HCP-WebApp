@@ -1,81 +1,52 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { Sidebar } from '../../components/Sidebar';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
-import { addVital, getAllPatients, getVitalsForPatient, PatientRecord } from '../../lib/patientStore';
+import { hcpPatientApi } from '../../lib/api';
+import type { Patient } from '../../lib/api';
 
 export default function PharmacyPatientsPage() {
-  const [patients, setPatients] = useState<PatientRecord[]>([]);
-  const [selectedPatient, setSelectedPatient] = useState<PatientRecord | null>(null);
-  const [showVitalsModal, setShowVitalsModal] = useState(false);
-  const [systolic, setSystolic] = useState('');
-  const [diastolic, setDiastolic] = useState('');
-  const [pulse, setPulse] = useState('');
-  const [temperature, setTemperature] = useState('');
-  const [weightKg, setWeightKg] = useState('');
-  const [note, setNote] = useState('');
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    setPatients(getAllPatients());
+    const loadPatients = async () => {
+      try {
+        setIsLoading(true);
+        setError('');
+        const data = await hcpPatientApi.getPatients(1, 100);
+        setPatients(data);
+      } catch (err) {
+        console.error('Failed to load pharmacy patients:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load patients');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPatients();
   }, []);
 
-  const patientsWithVitalsState = useMemo(() => {
-    return patients.map((patient) => {
-      const vitals = getVitalsForPatient(patient.id);
-      return {
-        ...patient,
-        hasVitals: vitals.length > 0,
-      };
+  const filteredPatients = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return patients;
+    }
+
+    return patients.filter((patient) => {
+      const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase();
+      return fullName.includes(query) || (patient.ghanaCard || '').toLowerCase().includes(query);
     });
-  }, [patients]);
+  }, [patients, searchQuery]);
 
-  const openVitalsModalIfNeeded = (patient: PatientRecord & { hasVitals: boolean }) => {
-    if (patient.hasVitals) {
-      return;
-    }
-
-    setSelectedPatient(patient);
-    setShowVitalsModal(true);
-  };
-
-  const closeModal = () => {
-    setShowVitalsModal(false);
-    setSelectedPatient(null);
-    setSystolic('');
-    setDiastolic('');
-    setPulse('');
-    setTemperature('');
-    setWeightKg('');
-    setNote('');
-  };
-
-  const handleSaveVitals = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!selectedPatient) {
-      return;
-    }
-
-    const parsedSystolic = Number(systolic);
-    const parsedDiastolic = Number(diastolic);
-
-    if (Number.isNaN(parsedSystolic) || Number.isNaN(parsedDiastolic)) {
-      alert('Please enter valid systolic and diastolic values.');
-      return;
-    }
-
-    addVital(selectedPatient.id, {
-      systolic: parsedSystolic,
-      diastolic: parsedDiastolic,
-      pulse: pulse ? Number(pulse) : undefined,
-      temperature: temperature ? Number(temperature) : undefined,
-      weightKg: weightKg ? Number(weightKg) : undefined,
-      note,
-    });
-
-    setPatients(getAllPatients());
-    closeModal();
+  const getInitials = (firstName?: string, lastName?: string) => {
+    const first = firstName?.[0] || '';
+    const last = lastName?.[0] || '';
+    return (first + last || 'U').toUpperCase();
   };
 
   return (
@@ -86,16 +57,38 @@ export default function PharmacyPatientsPage() {
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Patients</h1>
-              <p className="subtitle">Click a patient to capture vitals when they are missing.</p>
+              <p className="subtitle">Review patient condition and medication adherence.</p>
             </div>
           </div>
+
+          {error && (
+            <div style={{
+              padding: '12px',
+              backgroundColor: '#fee',
+              borderRadius: '6px',
+              border: '1px solid #fcc',
+              color: '#c33',
+              marginBottom: '16px'
+            }}>
+              {error}
+            </div>
+          )}
 
           <section className="panel hcp-panel">
             <div className="panel-headline-row" style={{ marginBottom: 16 }}>
               <div>
-                <p className="panel-title">Patient Vitals Intake</p>
-                <p className="text-muted">{patientsWithVitalsState.length} patients available</p>
+                <p className="panel-title">Patients Overview</p>
+                <p className="text-muted">{isLoading ? 'Loading...' : `${filteredPatients.length} patients available`}</p>
               </div>
+            </div>
+
+            <div className="search-row" style={{ marginBottom: 16 }}>
+              <input
+                type="text"
+                placeholder="Search by name or Ghana Card"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
             </div>
 
             <table className="table hcp-table">
@@ -105,111 +98,46 @@ export default function PharmacyPatientsPage() {
                   <th>Age</th>
                   <th>Condition</th>
                   <th>Last check-in</th>
-                  <th>Vitals</th>
+                  <th>Adherence</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {patientsWithVitalsState.map((patient) => (
-                  <tr
-                    key={patient.id}
-                    onClick={() => openVitalsModalIfNeeded(patient)}
-                    style={{ cursor: patient.hasVitals ? 'default' : 'pointer' }}
-                  >
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                      Loading patients...
+                    </td>
+                  </tr>
+                ) : filteredPatients.length > 0 ? (
+                  filteredPatients.map((patient) => (
+                  <tr key={patient.id}>
                     <td>
                       <div className="table-name-cell">
-                        <span className="table-avatar">{patient.initials}</span>
-                        {patient.name}
+                        <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
+                        {patient.firstName} {patient.lastName}
                       </div>
                     </td>
                     <td>{patient.age}</td>
-                    <td>{patient.condition}</td>
+                    <td>{patient.chronicConditions?.join(', ') || 'N/A'}</td>
                     <td>{patient.lastCheckIn}</td>
+                    <td>{patient.adherence || 'N/A'}</td>
                     <td>
-                      <span className={`status-pill ${patient.hasVitals ? 'status-stable' : 'status-silent'}`}>
-                        {patient.hasVitals ? 'Entered' : 'Not entered'}
-                      </span>
-                    </td>
-                    <td>
-                      {!patient.hasVitals ? (
-                        <button
-                          type="button"
-                          className="text-link"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openVitalsModalIfNeeded(patient);
-                          }}
-                        >
-                          Enter vitals
-                        </button>
-                      ) : (
-                        <span className="text-muted">Already entered</span>
-                      )}
+                      <Link href={`/patients/${patient.id}`} className="text-link">
+                        View
+                      </Link>
                     </td>
                   </tr>
-                ))}
+                ))) : (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                      No patients found
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </section>
-
-          {showVitalsModal && selectedPatient && (
-            <div className="modal-backdrop" onClick={closeModal}>
-              <aside
-                className="panel hcp-panel appointment-modal-preview appointment-modal-overlay"
-                onClick={(event) => event.stopPropagation()}
-                role="dialog"
-                aria-modal="true"
-                aria-label="Enter patient vitals"
-              >
-                <div className="modal-head-row">
-                  <p className="panel-title" style={{ margin: 0 }}>Enter vitals for {selectedPatient.name}</p>
-                  <button type="button" className="modal-close" aria-label="Close modal" onClick={closeModal}>
-                    ×
-                  </button>
-                </div>
-
-                <form onSubmit={handleSaveVitals}>
-                  <div className="onboarding-grid-two">
-                    <label>
-                      <span className="onboarding-field-label">Systolic (mmHg)</span>
-                      <input type="number" min={50} required value={systolic} onChange={(event) => setSystolic(event.target.value)} />
-                    </label>
-                    <label>
-                      <span className="onboarding-field-label">Diastolic (mmHg)</span>
-                      <input type="number" min={30} required value={diastolic} onChange={(event) => setDiastolic(event.target.value)} />
-                    </label>
-                  </div>
-
-                  <div className="onboarding-grid-two">
-                    <label>
-                      <span className="onboarding-field-label">Pulse (optional)</span>
-                      <input type="number" min={20} value={pulse} onChange={(event) => setPulse(event.target.value)} />
-                    </label>
-                    <label>
-                      <span className="onboarding-field-label">Temperature (optional)</span>
-                      <input type="number" min={30} step="0.1" value={temperature} onChange={(event) => setTemperature(event.target.value)} />
-                    </label>
-                  </div>
-
-                  <div className="onboarding-grid-two">
-                    <label>
-                      <span className="onboarding-field-label">Weight kg (optional)</span>
-                      <input type="number" min={1} step="0.1" value={weightKg} onChange={(event) => setWeightKg(event.target.value)} />
-                    </label>
-                    <label>
-                      <span className="onboarding-field-label">Note</span>
-                      <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional note" />
-                    </label>
-                  </div>
-
-                  <div className="modal-actions">
-                    <button type="button" className="ghost small" onClick={closeModal}>Cancel</button>
-                    <button type="submit" className="primary small">Save vitals</button>
-                  </div>
-                </form>
-              </aside>
-            </div>
-          )}
         </main>
       </div>
     </ProtectedRoute>

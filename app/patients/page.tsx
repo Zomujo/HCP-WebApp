@@ -4,16 +4,56 @@ import Link from 'next/link';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { getAllPatients, registerPatient } from '../lib/patientStore';
+import { hcpPatientApi } from '../lib/api';
+import type { Patient } from '../lib/api';
+
+type FilterKey = 'all' | 'hypertension' | 'diabetes' | 'both' | 'critical' | 'silent' | 'stable';
+
+const FILTER_OPTIONS: Array<{ key: FilterKey; label: string }> = [
+  { key: 'all', label: 'All' },
+  { key: 'hypertension', label: 'Hypertension' },
+  { key: 'diabetes', label: 'Diabetes' },
+  { key: 'both', label: 'Both' },
+  { key: 'critical', label: 'Critical' },
+  { key: 'silent', label: 'Silent' },
+  { key: 'stable', label: 'Stable' },
+];
 
 export default function PatientsPage() {
-  const [patients, setPatients] = useState(getAllPatients());
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
-    setPatients(getAllPatients());
-  }, []);
+    const loadPatients = async () => {
+      try {
+        setIsLoading(true);
+        setError('');
+
+        const data =
+          activeFilter === 'all'
+            ? await hcpPatientApi.getPatients(1, 100)
+            : await hcpPatientApi.getPatientsWithOptions({
+                page: 1,
+                pageSize: 100,
+                filterBy: activeFilter,
+              });
+
+        setPatients(data);
+      } catch (err) {
+        console.error('Failed to load patients:', err);
+        setError('Failed to load patients');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPatients();
+  }, [activeFilter]);
 
   const filteredPatients = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -22,38 +62,28 @@ export default function PatientsPage() {
     }
 
     return patients.filter((patient) => {
+      const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase();
       return (
-        patient.name.toLowerCase().includes(query) ||
+        fullName.includes(query) ||
         patient.id.toLowerCase().includes(query) ||
         (patient.ghanaCard || '').toLowerCase().includes(query)
       );
     });
   }, [patients, searchQuery]);
 
-  const handleRegisterPatient = (event: FormEvent<HTMLFormElement>) => {
+  const handleRegisterPatient = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const fullName = String(data.get('fullName') || '').trim();
-    const age = Number(data.get('age'));
-    const condition = String(data.get('condition') || '').trim();
-
-    if (!fullName || Number.isNaN(age) || age <= 0 || !condition) {
-      alert('Please provide a valid full name, age, and condition.');
-      return;
-    }
-
-    registerPatient({
-      fullName,
-      age,
-      condition,
-      ghanaCard: String(data.get('ghanaCard') || ''),
-      nhis: String(data.get('nhis') || ''),
-      facility: String(data.get('facility') || ''),
-    });
-
-    setPatients(getAllPatients());
+    // This would typically send data to an API endpoint
+    // For now, we'll just close the modal
+    // In a real app, you might use: await patientApi.registerPatient(...)
     setShowRegisterModal(false);
     event.currentTarget.reset();
+  };
+
+  const getInitials = (firstName?: string, lastName?: string) => {
+    const first = firstName?.[0] || '';
+    const last = lastName?.[0] || '';
+    return (first + last).toUpperCase();
   };
 
   return (
@@ -64,70 +94,100 @@ export default function PatientsPage() {
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Patients</h1>
-              <p className="subtitle">{patients.length} patients in your care.</p>
+              <p className="subtitle">{isLoading ? 'Loading...' : `${patients.length} patients in your care.`}</p>
             </div>
             <button className="primary small" onClick={() => setShowRegisterModal(true)}>+ Register patient</button>
           </div>
 
-          <div className="panel hcp-panel">
-            <div className="search-row" style={{ marginBottom: 16 }}>
-              <input
-                type="text"
-                placeholder="Search by name, ID, Ghana Card"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-              <div className="filter-row">
-                <span className="filter-pill active">All</span>
-                <span className="filter-pill">Hypertension</span>
-                <span className="filter-pill">Diabetes</span>
-                <span className="filter-pill">Both</span>
-                <span className="filter-pill">Critical</span>
-                <span className="filter-pill">Silent</span>
-                <span className="filter-pill">Stable</span>
-              </div>
+          {error && (
+            <div style={{ 
+              padding: '12px', 
+              backgroundColor: '#fee', 
+              borderRadius: '6px',
+              border: '1px solid #fcc',
+              color: '#c33',
+              marginBottom: '16px'
+            }}>
+              {error}
             </div>
+          )}
 
-            <table className="table hcp-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Age</th>
-                  <th>Condition</th>
-                  <th>Last check-in</th>
-                  <th>Adherence</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPatients.map((patient) => (
-                  <tr key={patient.id}>
-                    <td>
-                      <div className="table-name-cell">
-                        <span className="table-avatar">{patient.initials}</span>
-                        {patient.name}
-                      </div>
-                    </td>
-                    <td>{patient.age}</td>
-                    <td>{patient.condition}</td>
-                    <td>{patient.lastCheckIn}</td>
-                    <td className="adherence-cell">{patient.adherence}</td>
-                    <td>
-                      <span className={`status-pill status-${patient.status.toLowerCase()}`}>
-                        {patient.status}
-                      </span>
-                    </td>
-                    <td className="row-arrow">
-                      <Link href={`/patients/${patient.id}`} aria-label={`Open ${patient.name} details`}>
-                        &gt;
-                      </Link>
-                    </td>
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
+              Loading patients...
+            </div>
+          ) : (
+            <div className="panel hcp-panel">
+              <div className="search-row" style={{ marginBottom: 16 }}>
+                <input
+                  type="text"
+                  placeholder="Search by name, ID, Ghana Card"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+                <div className="filter-row">
+                  {FILTER_OPTIONS.map((filter) => (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      className={`filter-pill ${activeFilter === filter.key ? 'active' : ''}`}
+                      onClick={() => setActiveFilter(filter.key)}
+                    >
+                      {filter.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <table className="table hcp-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Age</th>
+                    <th>Condition</th>
+                    <th>Last check-in</th>
+                    <th>Adherence</th>
+                    <th>Status</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredPatients.length > 0 ? (
+                    filteredPatients.map((patient) => (
+                      <tr key={patient.id}>
+                        <td>
+                          <div className="table-name-cell">
+                            <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
+                            {patient.firstName} {patient.lastName}
+                          </div>
+                        </td>
+                        <td>{patient.age}</td>
+                        <td>{patient.chronicConditions?.join(', ') || 'N/A'}</td>
+                        <td>{patient.lastCheckIn || 'N/A'}</td>
+                        <td className="adherence-cell">{patient.adherence || 'N/A'}</td>
+                        <td>
+                          <span className={`status-pill status-${(patient.status || 'stable').toLowerCase()}`}>
+                            {patient.status || 'Stable'}
+                          </span>
+                        </td>
+                        <td className="row-arrow">
+                          <Link href={`/patients/${patient.id}`} aria-label={`Open patient details`}>
+                            &gt;
+                          </Link>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                        No patients found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {showRegisterModal && (
             <div className="modal-backdrop" onClick={() => setShowRegisterModal(false)}>

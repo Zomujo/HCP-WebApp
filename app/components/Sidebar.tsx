@@ -3,34 +3,38 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { getHealthWorkerNavItems, getPharmacyNavItems } from '../lib/dummy';
+import { useAuth } from '../lib/AuthContext';
+import { useState } from 'react';
+
+const healthWorkerNavItems = [
+  { href: '/dashboard', label: 'Overview' },
+  { href: '/appointments', label: 'Appointments' },
+  { href: '/patients', label: 'Patients' },
+  { href: '/chats', label: 'Chats' },
+  { href: '/profile', label: 'Profile' },
+];
+
+const pharmacyNavItems = [
+  { href: '/pharmacy/dashboard', label: 'Dashboard' },
+  { href: '/pharmacy/patients', label: 'Patients' },
+  { href: '/pharmacy/chats', label: 'Chats' },
+];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [userRole, setUserRole] = useState<'health-worker' | 'pharmacy' | null>(null);
+  const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    const role = localStorage.getItem('hcp-user-role') as 'health-worker' | 'pharmacy' | null;
-    setUserRole(role);
-  }, []);
-
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [pathname]);
-
   const handleLogout = () => {
-    localStorage.removeItem('hcp-auth-token');
-    localStorage.removeItem('hcp-user-role');
+    logout();
     router.replace('/login');
   };
 
-  const navItems = userRole === 'pharmacy' ? getPharmacyNavItems() : getHealthWorkerNavItems();
-  const roleLabel = userRole === 'pharmacy' ? 'Pharmacy' : 'Health Worker portal';
-  const facilityName = userRole === 'pharmacy' ? 'Central Pharmacy' : 'Kumasi South Hosp';
-  const userName = userRole === 'pharmacy' ? 'James Kwakye' : 'Adwoa (HW)';
+  const navItems = user?.role === 'pharmacy-personnel' ? pharmacyNavItems : healthWorkerNavItems;
+  const roleLabel = user?.role === 'pharmacy-personnel' ? 'Pharmacy Personnel' : 'Health Worker portal';
+  const facilityName = user?.facility?.name || 'Primary Facility';
+  const userName = user ? `${user.firstName || user.email?.split('@')[0] || 'User'}` : 'User';
 
   return (
     <aside className="sidebar hcp-sidebar">
@@ -67,7 +71,7 @@ export function Sidebar() {
 
         <div className="sidebar-footer">
           <div className="patient-pill">
-            <div className="avatar-badge">{userName[0]}</div>
+            <div className="avatar-badge">{(userName || 'U')[0]?.toUpperCase()}</div>
             <div>
               <p style={{ margin: 0, fontWeight: 700 }}>{userName}</p>
               <p className="text-muted" style={{ margin: 0, fontSize: '0.9rem' }}>{facilityName}</p>

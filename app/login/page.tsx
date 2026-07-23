@@ -1,27 +1,75 @@
 "use client";
 
-import { FormEvent, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '../lib/AuthContext';
+import { useGoogleScript, signInWithGoogle } from '../lib/googleAuth';
+import { ROLE_CONFIG } from '../lib/config';
 
 export default function LoginPage() {
-  const [role, setRole] = useState<'health-worker' | 'pharmacy'>('health-worker');
+  const router = useRouter();
+  const { login, loginWithGoogle, isLoading, isAuthenticated, user } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const email = data.get('email');
-    const password = data.get('password');
+  useGoogleScript();
 
-    if (email === 'user@yelima.health' && password === 'password123') {
-      localStorage.setItem('hcp-auth-token', 'demo-token');
-      localStorage.setItem('hcp-user-role', role);
-      const redirectPath = role === 'health-worker' ? '/dashboard' : '/pharmacy/dashboard';
-      window.location.href = redirectPath;
-      return;
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      if (user.needsOnboarding) {
+        router.push('/onboarding');
+        return;
+      }
+      const defaultRoute = ROLE_CONFIG[user.role].defaultRoute;
+      router.push(defaultRoute);
     }
+  }, [isAuthenticated, user, router]);
 
-    alert('Invalid demo credentials. Use user@yelima.health / password123');
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      const loggedInUser = await login(email, password);
+      if (loggedInUser.needsOnboarding) {
+        router.push('/onboarding');
+        return;
+      }
+      router.push(ROLE_CONFIG[loggedInUser.role].defaultRoute);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = () => {
+    signInWithGoogle(
+      async (token: string) => {
+        try {
+          setError('');
+          const loggedInUser = await loginWithGoogle(token);
+          if (loggedInUser.needsOnboarding) {
+            router.push('/onboarding');
+            return;
+          }
+          router.push(ROLE_CONFIG[loggedInUser.role].defaultRoute);
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Google sign in failed';
+          console.error('Google sign in error:', err);
+          setError(errorMessage);
+        }
+      },
+      (message: string) => {
+        setError(message);
+      }
+    );
   };
 
   return (
@@ -44,41 +92,63 @@ export default function LoginPage() {
             <p className="text-muted">Welcome back! Please enter your details.</p>
           </div>
 
-          <button className="ghost auth-action-button">
+          <button 
+            type="button"
+            className="ghost auth-action-button"
+            onClick={handleGoogleSignIn}
+            disabled={isSubmitting || isLoading}
+          >
             <Image src="/GoogleIcon.png" alt="Google icon" width={18} height={18} />
             <span>Sign in with Google</span>
           </button>
           <p className="auth-divider">Or log in with email</p>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            <button
-              type="button"
-              onClick={() => setRole('health-worker')}
-              className={`${role === 'health-worker' ? 'primary' : 'ghost'}`}
-              style={{ flex: 1, padding: '8px 12px', fontSize: '14px' }}
-            >
-              Health Worker
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole('pharmacy')}
-              className={`${role === 'pharmacy' ? 'primary' : 'ghost'}`}
-              style={{ flex: 1, padding: '8px 12px', fontSize: '14px' }}
-            >
-              Pharmacy
-            </button>
-          </div>
+          {error && (
+            <div style={{ 
+              padding: '10px 12px', 
+              backgroundColor: '#fee', 
+              borderRadius: '6px',
+              border: '1px solid #fcc',
+              color: '#c33',
+              fontSize: '14px',
+              marginBottom: '16px'
+            }}>
+              {error}
+            </div>
+          )}
 
           <form className="auth-fields" onSubmit={handleSubmit}>
             <label>
               <span className="block-label">Email</span>
-              <input name="email" type="email" placeholder="you@example.com" defaultValue="user@yelima.health" />
+              <input 
+                name="email" 
+                type="email" 
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isSubmitting || isLoading}
+              />
             </label>
             <label>
               <span className="block-label">Password</span>
-              <input name="password" type="password" placeholder="At least 6 characters" defaultValue="password123" />
+              <input 
+                name="password" 
+                type="password" 
+                placeholder="At least 6 characters"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={isSubmitting || isLoading}
+              />
             </label>
-            <button type="submit" className="primary auth-submit">Sign in ›</button>
+            <button 
+              type="submit" 
+              className="primary auth-submit"
+              disabled={isSubmitting || isLoading}
+            >
+              {isSubmitting || isLoading ? 'Signing in...' : 'Sign in ›'}
+            </button>
           </form>
 
           <p className="auth-footnote">
