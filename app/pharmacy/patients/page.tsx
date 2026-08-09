@@ -1,10 +1,9 @@
 "use client";
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Sidebar } from '../../components/Sidebar';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
-import { hcpPatientApi } from '../../lib/api';
+import { pharmacyPatientApi } from '../../lib/api';
 import type { Patient } from '../../lib/api';
 
 export default function PharmacyPatientsPage() {
@@ -18,7 +17,7 @@ export default function PharmacyPatientsPage() {
       try {
         setIsLoading(true);
         setError('');
-        const data = await hcpPatientApi.getPatients(1, 100);
+        const data = await pharmacyPatientApi.getPatients(1, 100);
         setPatients(data);
       } catch (err) {
         console.error('Failed to load pharmacy patients:', err);
@@ -120,13 +119,9 @@ export default function PharmacyPatientsPage() {
                     </td>
                     <td>{patient.age}</td>
                     <td>{patient.chronicConditions?.join(', ') || 'N/A'}</td>
-                    <td>{patient.lastCheckIn}</td>
+                    <td>{patient.lastCheckIn || 'N/A'}</td>
                     <td>{patient.adherence || 'N/A'}</td>
-                    <td>
-                      <Link href={`/patients/${patient.id}`} className="text-link">
-                        View
-                      </Link>
-                    </td>
+                    <td className="text-muted">Summary only</td>
                   </tr>
                 ))) : (
                   <tr>

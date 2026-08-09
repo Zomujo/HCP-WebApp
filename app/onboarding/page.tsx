@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../lib/AuthContext';
 import { facilityApi, normalizePhoneNumber } from '../lib/api';
+import { ROLE_CONFIG } from '../lib/config';
 
 interface Facility {
   id: string;
@@ -75,7 +76,13 @@ export default function OnboardingPage() {
       try {
         const selectedFacility = facilities.find((facility) => facility.id === selectedFacilityId);
 
+        if (!user?.personnelId) {
+          throw new Error('Missing personnel ID for onboarding. Please sign in again.');
+        }
+
         await onboard({
+          personnelId: user.personnelId,
+          role: user.role,
           firstname: firstName.trim(),
           lastname: lastName.trim(),
           phoneNumber: normalizePhoneNumber(phone),
@@ -84,7 +91,7 @@ export default function OnboardingPage() {
           facilityName: selectedFacility?.name,
         });
 
-        router.push('/dashboard');
+        router.push(ROLE_CONFIG[user.role].defaultRoute);
       } catch (err) {
         const rawMessage = err instanceof Error ? err.message : 'Onboarding failed. Please try again.';
         if (rawMessage.toLowerCase().includes('username') && rawMessage.toLowerCase().includes('already in use')) {

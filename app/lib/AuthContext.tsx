@@ -5,6 +5,7 @@ import { authApi, AuthResponse } from './api';
 
 interface User {
   id: string;
+  personnelId: string;
   email: string;
   firstName?: string;
   lastName?: string;
@@ -24,8 +25,10 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<User>;
   loginWithGoogle: (googleToken: string) => Promise<User>;
-  signup: (data: { email: string; password: string }) => Promise<User>;
+  signup: (data: { email: string; password: string; role: 'health-worker' | 'pharmacy-personnel' }) => Promise<User>;
   onboard: (data: {
+    personnelId: string;
+    role: 'health-worker' | 'pharmacy-personnel';
     firstname: string;
     lastname: string;
     phoneNumber: string;
@@ -39,6 +42,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const PENDING_USER_KEY = 'hcp-pending-onboarding-user';
+const PENDING_CREDENTIALS_KEY = 'hcp-pending-onboarding-credentials';
+
 function isLikelyJwt(token: string): boolean {
   return typeof token === 'string' && token.split('.').length === 3;
 }
@@ -47,6 +53,50 @@ function persistAuth(response: AuthResponse) {
   localStorage.setItem('hcp-auth-token', response.token);
   localStorage.setItem('hcp-user', JSON.stringify(response.user));
   localStorage.setItem('hcp-user-role', response.user.role);
+  localStorage.removeItem(PENDING_USER_KEY);
+  sessionStorage.removeItem(PENDING_CREDENTIALS_KEY);
+}
+
+function persistPendingUser(user: User) {
+  localStorage.setItem(PENDING_USER_KEY, JSON.stringify(user));
+}
+
+function readPendingUser(): User | null {
+  const stored = localStorage.getItem(PENDING_USER_KEY);
+  if (!stored || stored === 'undefined') return null;
+
+  try {
+    return JSON.parse(stored) as User;
+  } catch {
+    localStorage.removeItem(PENDING_USER_KEY);
+    return null;
+  }
+}
+
+function persistPendingCredentials(email: string, password: string) {
+  sessionStorage.setItem(PENDING_CREDENTIALS_KEY, JSON.stringify({ email, password }));
+}
+
+function readPendingCredentials(): { email: string; password: string } | null {
+  const stored = sessionStorage.getItem(PENDING_CREDENTIALS_KEY);
+  if (!stored || stored === 'undefined') return null;
+
+  try {
+    const parsed = JSON.parse(stored) as { email?: string; password?: string };
+    if (typeof parsed.email === 'string' && typeof parsed.password === 'string') {
+      return { email: parsed.email, password: parsed.password };
+    }
+  } catch {
+    // fall through to cleanup
+  }
+
+  sessionStorage.removeItem(PENDING_CREDENTIALS_KEY);
+  return null;
+}
+
+function clearPendingOnboarding() {
+  localStorage.removeItem(PENDING_USER_KEY);
+  sessionStorage.removeItem(PENDING_CREDENTIALS_KEY);
 }
 
 function splitUserName(userName?: string): { firstName: string; lastName: string } {
@@ -66,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const initializeAuth = async () => {
       const savedToken = localStorage.getItem('hcp-auth-token');
       const savedUser = localStorage.getItem('hcp-user');
+      const pendingUser = readPendingUser();
 
       if (savedToken && !isLikelyJwt(savedToken)) {
         localStorage.removeItem('hcp-auth-token');
@@ -98,6 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const names = splitUserName(current?.userName);
           const hydratedUser: User = {
             id: current?.id || parsedUser?.id || '',
+            personnelId: current?.personnelId || parsedUser?.personnelId || '',
             email: current?.email || parsedUser?.email || '',
             firstName: names.firstName || parsedUser?.firstName || '',
             lastName: names.lastName || parsedUser?.lastName || '',
@@ -115,6 +167,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           // Keep locally cached user if /current fails.
         }
+      } else if (pendingUser) {
+        setUser(pendingUser);
       }
 
       setIsLoading(false);
@@ -124,8 +178,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const applyAuth = (response: AuthResponse) => {
-    persistAuth(response);
-    setToken(response.token);
+    if (response.token && isLikelyJwt(response.token)) {
+      persistAuth(response);
+      setToken(response.token);
+    } else {
+      localStorage.removeItem('hcp-auth-token');
+      localStorage.removeItem('hcp-user');
+      localStorage.removeItem('hcp-user-role');
+      persistPendingUser(response.user);
+      setToken(null);
+    }
     setUser(response.user);
   };
 
@@ -151,10 +213,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (data: { email: string; password: string }) => {
+  const signup = async (data: { email: string; password: string; role: 'health-worker' | 'pharmacy-personnel' }) => {
     try {
       setIsLoading(true);
       const response = await authApi.signup(data);
+      persistPendingCredentials(data.email, data.password);
       applyAuth(response);
       return response.user;
     } finally {
@@ -163,6 +226,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const onboard = async (data: {
+    personnelId: string;
+    role: 'health-worker' | 'pharmacy-personnel';
     firstname: string;
     lastname: string;
     phoneNumber: string;
@@ -173,8 +238,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       const response = await authApi.onboard(data);
-      applyAuth(response);
-      return response.user;
+
+      if (response.token && isLikelyJwt(response.token)) {
+        applyAuth(response);
+        return response.user;
+      }
+
+      const pendingCredentials = readPendingCredentials();
+      if (!pendingCredentials) {
+        clearPendingOnboarding();
+        throw new Error('Onboarding completed. Please sign in with your email and password to continue.');
+      }
+
+      const loggedIn = await authApi.login(pendingCredentials.email, pendingCredentials.password);
+      applyAuth({
+        ...loggedIn,
+        user: {
+          ...loggedIn.user,
+          personnelId: data.personnelId,
+          role: data.role,
+          firstName: data.firstname,
+          lastName: data.lastname,
+          facilityId: data.facilityId,
+          facility: data.facilityName
+            ? { id: data.facilityId, name: data.facilityName }
+            : loggedIn.user.facility,
+          needsOnboarding: false,
+        },
+      });
+      return loggedIn.user;
     } finally {
       setIsLoading(false);
     }
@@ -184,6 +276,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('hcp-auth-token');
     localStorage.removeItem('hcp-user');
     localStorage.removeItem('hcp-user-role');
+    clearPendingOnboarding();
     setToken(null);
     setUser(null);
   };
@@ -193,6 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('hcp-auth-token');
     localStorage.removeItem('hcp-user');
     localStorage.removeItem('hcp-user-role');
+    clearPendingOnboarding();
     setToken(null);
     setUser(null);
   };

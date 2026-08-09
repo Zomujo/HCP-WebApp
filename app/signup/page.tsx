@@ -1,36 +1,20 @@
 "use client";
 
-import { FormEvent, useState } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../lib/AuthContext';
 import { useGoogleScript, signInWithGoogle } from '../lib/googleAuth';
+import { ROLE_CONFIG } from '../lib/config';
 
 export default function SignupPage() {
   const router = useRouter();
-  const { signup, loginWithGoogle, isLoading } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { loginWithGoogle, isLoading } = useAuth();
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useGoogleScript();
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError('');
-    setIsSubmitting(true);
-
-    try {
-      await signup({ email, password });
-      router.push('/onboarding');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Signup failed. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleGoogleSignUp = () => {
     signInWithGoogle(
@@ -42,7 +26,7 @@ export default function SignupPage() {
             router.push('/onboarding');
             return;
           }
-          router.push('/dashboard');
+          router.push(ROLE_CONFIG[loggedInUser.role].defaultRoute);
         } catch (err) {
           const errorMessage = err instanceof Error ? err.message : 'Google sign up failed';
           console.error('Google sign up error:', err);
@@ -84,7 +68,11 @@ export default function SignupPage() {
             <Image src="/GoogleIcon.png" alt="Google icon" width={18} height={18} />
             <span>Sign up with Google</span>
           </button>
-          <p className="auth-divider">Or sign up with email</p>
+          <p className="auth-divider">Google authentication only</p>
+
+          <p className="text-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: '0.92rem' }}>
+            Email and password signup is temporarily unavailable on this environment.
+          </p>
 
           {error && (
             <div style={{ 
@@ -99,40 +87,6 @@ export default function SignupPage() {
               {error}
             </div>
           )}
-
-          <form className="auth-fields" onSubmit={handleSubmit}>
-            <label>
-              <span className="block-label">Email</span>
-              <input 
-                name="email" 
-                type="email" 
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isSubmitting || isLoading}
-              />
-            </label>
-            <label>
-              <span className="block-label">Password</span>
-              <input 
-                name="password" 
-                type="password" 
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isSubmitting || isLoading}
-              />
-            </label>
-            <button 
-              type="submit" 
-              className="primary auth-submit"
-              disabled={isSubmitting || isLoading}
-            >
-              {isSubmitting || isLoading ? 'Signing up...' : 'Sign up ›'}
-            </button>
-          </form>
 
           <p className="auth-footnote">
             Already have an account? <Link href="/login">Sign in</Link>

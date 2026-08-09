@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { hcpPatientApi } from '../lib/api';
-import type { Patient } from '../lib/api';
 
 interface DashboardStats {
   label: string;
@@ -17,6 +16,42 @@ interface Appointment {
   value: number;
   note: string;
   active?: boolean;
+}
+
+function startOfWeek(date: Date): Date {
+  const copy = new Date(date);
+  const day = copy.getDay();
+  const diff = (day + 6) % 7;
+  copy.setHours(0, 0, 0, 0);
+  copy.setDate(copy.getDate() - diff);
+  return copy;
+}
+
+function buildWeeklyCheckInData(lastCheckInDates: string[]): Appointment[] {
+  const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const counts = new Array(7).fill(0);
+  const weekStart = startOfWeek(new Date());
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+
+  for (const iso of lastCheckInDates) {
+    const parsed = new Date(iso);
+    if (Number.isNaN(parsed.getTime()) || parsed < weekStart || parsed >= weekEnd) {
+      continue;
+    }
+
+    const index = (parsed.getDay() + 6) % 7;
+    counts[index] += 1;
+  }
+
+  const todayIndex = (new Date().getDay() + 6) % 7;
+
+  return labels.map((day, index) => ({
+    day,
+    value: counts[index],
+    note: counts[index] === 1 ? '1 check-in' : `${counts[index]} check-ins`,
+    active: index === todayIndex,
+  }));
 }
 
 export default function DashboardPage() {
@@ -42,28 +77,27 @@ export default function DashboardPage() {
 
         // Calculate stats
         const totalPatients = patients.length;
-        const criticalCount = patients.filter(p => p.status === 'Critical').length;
+        const criticalCount = patients.filter((patient) => (patient.criticalReadingsCount || 0) > 0 || patient.status === 'Critical').length;
         const silentCount = patients.filter(p => p.status === 'Silent').length;
+        const weeklyCheckIns = buildWeeklyCheckInData(
+          patients
+            .map((patient) => patient.lastCheckInAt)
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        );
 
         setDashboardStats([
           { label: 'Total Patients', value: totalPatients.toString() },
-          { label: 'Critical Readings', value: criticalCount.toString() },
+          { label: 'Patients With Critical Readings', value: criticalCount.toString() },
           { label: 'Silent Patients', value: silentCount.toString() },
         ]);
 
         // Set recent readings (first 3 patients with critical/caution status)
-        const critical = patients.filter(p => ['Critical', 'Caution'].includes(p.status || '')).slice(0, 3);
+        const critical = patients
+          .filter((patient) => (patient.criticalReadingsCount || 0) > 0 || patient.status === 'Critical')
+          .slice(0, 3);
         setRecentReadings(critical);
 
-        // Set weekly appointments (placeholder - you might need to fetch actual appointment data)
-        const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        const appointments = daysOfWeek.map((day, index) => ({
-          day,
-          value: Math.floor(Math.random() * 5),
-          note: `${Math.floor(Math.random() * 5)} visits`,
-          active: index === new Date().getDay() - 1,
-        }));
-        setWeeklyAppointments(appointments);
+        setWeeklyAppointments(weeklyCheckIns);
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
@@ -123,10 +157,10 @@ export default function DashboardPage() {
               <section className="panel hcp-panel" style={{ marginTop: 18 }}>
                 <div className="panel-headline-row">
                   <div>
-                    <p className="panel-title">Clinic Visits This Week</p>
-                    <p className="text-muted">{weeklyAppointments.reduce((sum, a) => sum + a.value, 0)} Total Appointments</p>
+                    <p className="panel-title">Patient Check-ins This Week</p>
+                    <p className="text-muted">{weeklyAppointments.reduce((sum, a) => sum + a.value, 0)} Total Check-ins</p>
                   </div>
-                  <Link href="/appointments" className="text-link">See All Appointments</Link>
+                  <Link href="/patients" className="text-link">See All Patients</Link>
                 </div>
 
                 <div className="week-grid-figma">

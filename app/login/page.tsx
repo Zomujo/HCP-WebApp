@@ -10,9 +10,7 @@ import { ROLE_CONFIG } from '../lib/config';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loginWithGoogle, isLoading, isAuthenticated, user } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { loginWithGoogle, isLoading, isAuthenticated, user } = useAuth();
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -29,25 +27,6 @@ export default function LoginPage() {
       router.push(defaultRoute);
     }
   }, [isAuthenticated, user, router]);
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError('');
-    setIsSubmitting(true);
-
-    try {
-      const loggedInUser = await login(email, password);
-      if (loggedInUser.needsOnboarding) {
-        router.push('/onboarding');
-        return;
-      }
-      router.push(ROLE_CONFIG[loggedInUser.role].defaultRoute);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleGoogleSignIn = () => {
     signInWithGoogle(
@@ -101,7 +80,11 @@ export default function LoginPage() {
             <Image src="/GoogleIcon.png" alt="Google icon" width={18} height={18} />
             <span>Sign in with Google</span>
           </button>
-          <p className="auth-divider">Or log in with email</p>
+          <p className="auth-divider">Google authentication only</p>
+
+          <p className="text-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: '0.92rem' }}>
+            Email and password login is temporarily unavailable on this environment.
+          </p>
 
           {error && (
             <div style={{ 
@@ -116,40 +99,6 @@ export default function LoginPage() {
               {error}
             </div>
           )}
-
-          <form className="auth-fields" onSubmit={handleSubmit}>
-            <label>
-              <span className="block-label">Email</span>
-              <input 
-                name="email" 
-                type="email" 
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isSubmitting || isLoading}
-              />
-            </label>
-            <label>
-              <span className="block-label">Password</span>
-              <input 
-                name="password" 
-                type="password" 
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isSubmitting || isLoading}
-              />
-            </label>
-            <button 
-              type="submit" 
-              className="primary auth-submit"
-              disabled={isSubmitting || isLoading}
-            >
-              {isSubmitting || isLoading ? 'Signing in...' : 'Sign in ›'}
-            </button>
-          </form>
 
           <p className="auth-footnote">
             Don&apos;t have an account? <Link href="/signup">Sign up</Link>

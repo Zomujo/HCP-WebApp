@@ -15,6 +15,7 @@ export interface AuthResponse {
   token: string;
   user: {
     id: string;
+    personnelId: string;
     email: string;
     firstName?: string;
     lastName?: string;
@@ -36,12 +37,15 @@ export interface Patient {
   age: number;
   chronicConditions: string[];
   lastCheckIn?: string;
+  lastCheckInAt?: string;
   adherence?: string;
   status?: string;
   ghanaCard?: string;
   nhis?: string;
   facility?: string;
   joined?: string;
+  criticalReadingsCount?: number;
+  assignedToYou?: boolean;
   vitals?: {
     systolic: number;
     diastolic: number;
@@ -77,6 +81,25 @@ export interface Medication {
   dose: string;
   frequency: string;
   adherence?: string;
+}
+
+export interface PharmacyAnalytics {
+  patientsCount: number;
+  vitalsRecordedCount: number;
+  referralsCount: number;
+}
+
+export interface PharmacyVitalHistory {
+  id: string;
+  patientId: string;
+  patientName: string;
+  patientCode?: string;
+  recordedAt: string;
+}
+
+interface AuthTokenPayload {
+  personnelId?: string;
+  token?: string;
 }
 
 function mapAppointment(row: any, patientId?: string): Appointment {
@@ -180,11 +203,14 @@ function mapPatient(raw: any): Patient {
     age: deriveAge(raw),
     chronicConditions: conditions,
     lastCheckIn: formatRelativeDate(raw.lastCheckInDate || raw.lastCheckIn),
+    lastCheckInAt: raw.lastCheckInDate || raw.lastCheckIn,
     adherence,
     status: capitalizeStatus(raw.adherenceStatus || raw.status),
     ghanaCard: raw.ghanaCardNumber || raw.ghanaCard,
     nhis: raw.nhisNumber || raw.nhis,
     facility: raw.facility?.name || raw.facility,
+    criticalReadingsCount: typeof raw.criticalReadingsCount === 'number' ? raw.criticalReadingsCount : undefined,
+    assignedToYou: typeof raw.assignedToYou === 'boolean' ? raw.assignedToYou : undefined,
   };
 }
 
@@ -198,6 +224,22 @@ function mapRole(role?: string): 'health-worker' | 'pharmacy-personnel' {
 function isLikelyJwt(token: string): boolean {
   // JWTs have 3 dot-separated base64url parts.
   return typeof token === 'string' && token.split('.').length === 3;
+}
+
+function extractAuthTokenPayload(data: unknown): AuthTokenPayload {
+  if (typeof data === 'string') {
+    return isLikelyJwt(data) ? { token: data } : { personnelId: data };
+  }
+
+  if (data && typeof data === 'object') {
+    const payload = data as Record<string, unknown>;
+    return {
+      personnelId: typeof payload.personnelId === 'string' ? payload.personnelId : undefined,
+      token: typeof payload.token === 'string' ? payload.token : undefined,
+    };
+  }
+
+  return {};
 }
 
 function getStoredJwt(): string {
@@ -228,6 +270,7 @@ function authFromToken(token: string, profile?: any, fallbackToken?: string): Au
     token: resolvedToken,
     user: {
       id: profile?.id || jwtPayload.sub || '',
+      personnelId: profile?.personnelId || jwtPayload.personnelId || '',
       email: profile?.email || jwtPayload.email || '',
       firstName: firstName || jwtPayload.firstName || jwtPayload.email?.split('@')[0] || '',
       lastName: lastName || jwtPayload.lastName || '',
@@ -332,95 +375,130 @@ async function apiCall<T>(
 // Authentication APIs
 export const authApi = {
   login: async (email: string, password: string): Promise<AuthResponse> => {
-    const response = await apiCall<ApiResponse<string>>(
+    const response = await apiCall<ApiResponse<string | AuthTokenPayload>>(
       '/api/v1/personnel/auth/login',
       'POST',
       { email, password }
     );
 
-    if (!response.data || typeof response.data !== 'string') {
+    const authPayload = extractAuthTokenPayload(response.data);
+
+    if (!authPayload.token) {
       throw new Error(response.message || 'Login failed: no token returned');
     }
 
-    if (!isLikelyJwt(response.data)) {
+    if (!isLikelyJwt(authPayload.token)) {
       throw new Error('Login returned an invalid token format. Please try again.');
     }
 
     // Persist token before calling /current
-    if (typeof window !== 'undefined' && isLikelyJwt(response.data)) {
-      localStorage.setItem('hcp-auth-token', response.data);
+    if (typeof window !== 'undefined' && isLikelyJwt(authPayload.token)) {
+      localStorage.setItem('hcp-auth-token', authPayload.token);
     }
 
     try {
       const profile = await authApi.getCurrent();
-      return authFromToken(response.data, profile);
+      const auth = authFromToken(authPayload.token, profile);
+      return {
+        ...auth,
+        user: {
+          ...auth.user,
+          personnelId: authPayload.personnelId || auth.user.personnelId,
+        },
+      };
     } catch {
-      return authFromToken(response.data);
+      const auth = authFromToken(authPayload.token);
+      return {
+        ...auth,
+        user: {
+          ...auth.user,
+          personnelId: authPayload.personnelId || auth.user.personnelId,
+        },
+      };
     }
   },
 
   loginWithGoogle: async (googleToken: string): Promise<AuthResponse> => {
-    const response = await apiCall<ApiResponse<string>>(
+    const response = await apiCall<ApiResponse<string | AuthTokenPayload>>(
       '/api/v1/personnel/auth/login/google',
       'POST',
       {},
       { idtoken: googleToken }
     );
 
-    if (!response.data || typeof response.data !== 'string') {
+    const authPayload = extractAuthTokenPayload(response.data);
+
+    if (!authPayload.token) {
       throw new Error(response.message || 'Google login failed: no token returned');
     }
 
-    if (!isLikelyJwt(response.data)) {
+    if (!isLikelyJwt(authPayload.token)) {
       throw new Error('Google login returned an invalid token format. Please try again.');
     }
 
-    if (typeof window !== 'undefined' && isLikelyJwt(response.data)) {
-      localStorage.setItem('hcp-auth-token', response.data);
+    if (typeof window !== 'undefined' && isLikelyJwt(authPayload.token)) {
+      localStorage.setItem('hcp-auth-token', authPayload.token);
     }
 
     try {
       const profile = await authApi.getCurrent();
-      return authFromToken(response.data, profile);
+      const auth = authFromToken(authPayload.token, profile);
+      return {
+        ...auth,
+        user: {
+          ...auth.user,
+          personnelId: authPayload.personnelId || auth.user.personnelId,
+        },
+      };
     } catch {
       // New Google users may not be onboarded yet — /current can fail
-      return authFromToken(response.data);
+      const auth = authFromToken(authPayload.token);
+      return {
+        ...auth,
+        user: {
+          ...auth.user,
+          personnelId: authPayload.personnelId || auth.user.personnelId,
+        },
+      };
     }
   },
 
-  signup: async (data: { email: string; password: string }): Promise<AuthResponse> => {
-    const response = await apiCall<ApiResponse<string>>(
+  signup: async (data: { email: string; password: string; role: 'health-worker' | 'pharmacy-personnel' }): Promise<AuthResponse> => {
+    const response = await apiCall<ApiResponse<string | AuthTokenPayload>>(
       '/api/v1/personnel/auth/signup',
       'POST',
       { email: data.email, password: data.password }
     );
 
-    if (!response.data || typeof response.data !== 'string') {
+    const authPayload = extractAuthTokenPayload(response.data);
+
+    if (!authPayload.personnelId && !authPayload.token) {
       throw new Error(response.message || 'Signup failed: no token returned');
     }
 
-    // Some environments return an ID string from signup instead of JWT.
-    // In that case, immediately login with credentials to obtain a valid token.
-    if (!isLikelyJwt(response.data)) {
-      const loggedIn = await authApi.login(data.email, data.password);
+    if (!authPayload.token || !isLikelyJwt(authPayload.token)) {
       return {
-        ...loggedIn,
+        token: '',
         user: {
-          ...loggedIn.user,
+          id: '',
+          personnelId: authPayload.personnelId || '',
+          email: data.email,
+          role: data.role,
           needsOnboarding: true,
         },
       };
     }
 
     if (typeof window !== 'undefined') {
-      localStorage.setItem('hcp-auth-token', response.data);
+      localStorage.setItem('hcp-auth-token', authPayload.token);
     }
 
-    const auth = authFromToken(response.data);
+    const auth = authFromToken(authPayload.token);
     return {
       ...auth,
       user: {
         ...auth.user,
+        personnelId: authPayload.personnelId || auth.user.personnelId,
         email: data.email,
         needsOnboarding: true,
       },
@@ -428,6 +506,8 @@ export const authApi = {
   },
 
   onboard: async (data: {
+    personnelId: string;
+    role: 'health-worker' | 'pharmacy-personnel';
     firstname: string;
     lastname: string;
     phoneNumber: string;
@@ -436,6 +516,8 @@ export const authApi = {
     facilityName?: string;
   }): Promise<AuthResponse> => {
     const payload = {
+      personnelId: data.personnelId,
+      role: data.role === 'pharmacy-personnel' ? 'pharmacy' : 'clinician',
       firstname: data.firstname.trim(),
       lastname: data.lastname.trim(),
       phoneNumber: normalizePhoneNumber(data.phoneNumber),
@@ -465,13 +547,12 @@ export const authApi = {
       return authFromToken(response.data, profile, existingJwt);
     } catch {
       const auth = authFromToken(response.data, undefined, existingJwt);
-      if (!auth.token) {
-        throw new Error('Onboarding completed but authentication token is invalid. Please sign in again.');
-      }
       return {
         ...auth,
         user: {
           ...auth.user,
+          personnelId: data.personnelId || auth.user.personnelId,
+          role: data.role,
           firstName: payload.firstname,
           lastName: payload.lastname,
           facilityId: payload.facilityId,
@@ -720,6 +801,103 @@ export const hcpPatientApi = {
       { reason }
     );
     return response.data!;
+  },
+};
+
+export const pharmacyPatientApi = {
+  getPatients: async (page = 1, limit = 50): Promise<Patient[]> => {
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel/pharmacies/patients?page=${page}&pageSize=${limit}`,
+      'GET'
+    );
+
+    return extractArray<any>(response.data).map(mapPatient);
+  },
+
+  getPatientsWithOptions: async (options: PatientQueryOptions = {}): Promise<Patient[]> => {
+    const params = new URLSearchParams();
+    if (options.search) params.set('search', options.search);
+    if (options.page) params.set('page', String(options.page));
+    if (options.pageSize) params.set('pageSize', String(options.pageSize));
+    if (options.filterBy) params.set('filterBy', options.filterBy);
+    if (options.orderBy) params.set('orderBy', options.orderBy);
+    if (options.orderDirection) params.set('orderDirection', options.orderDirection);
+
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel/pharmacies/patients${qs}`,
+      'GET'
+    );
+
+    return extractArray<any>(response.data).map(mapPatient);
+  },
+
+  getPatientsNoPaginate: async (search?: string): Promise<Array<{ id: string; name: string; patientCode?: string }>> => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel/pharmacies/patients/no-paginate${qs}`,
+      'GET'
+    );
+
+    return extractArray<any>(response.data).map((row: any) => ({
+      id: row.id,
+      name: row.name || [row.firstName, row.lastName].filter(Boolean).join(' ').trim(),
+      patientCode: row.patientCode,
+    }));
+  },
+
+  getPatientById: async (patientId: string): Promise<Patient> => {
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel/pharmacies/patients/${patientId}`,
+      'GET'
+    );
+    return mapPatient(response.data);
+  },
+
+  getLatestVitals: async (patientId: string): Promise<any[]> => {
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel/pharmacies/patients/${patientId}/vitals/latest`,
+      'GET'
+    );
+    return extractArray<any>(response.data);
+  },
+
+  getVitalHistories: async (page = 1, pageSize = 10): Promise<PharmacyVitalHistory[]> => {
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel/pharmacies/vital-histories?page=${page}&pageSize=${pageSize}`,
+      'GET'
+    );
+
+    return extractArray<any>(response.data).map((row: any) => ({
+      id: row.id,
+      patientId: row.patientId,
+      patientName: row.patient?.name || 'Unknown patient',
+      patientCode: row.patient?.patientCode,
+      recordedAt: row.recordedAt,
+    }));
+  },
+
+  getAnalytics: async (
+    dateRange?: 'today' | 'thisWeek' | 'thisMonth' | 'lastMonth' | 'last30Days' | 'lastThreeMonths' | 'thisYear'
+  ): Promise<PharmacyAnalytics> => {
+    const qs = dateRange ? `?dateRange=${encodeURIComponent(dateRange)}` : '';
+    const response = await apiCall<ApiResponse<PharmacyAnalytics>>(
+      `/api/v1/personnel/pharmacies/analytics${qs}`,
+      'GET'
+    );
+
+    return response.data || { patientsCount: 0, vitalsRecordedCount: 0, referralsCount: 0 };
+  },
+
+  getReferralCode: async (): Promise<string> => {
+    const response = await apiCall<ApiResponse<string>>(
+      '/api/v1/personnel/pharmacies/referral-code',
+      'GET'
+    );
+    return response.data || '';
   },
 };
 
