@@ -27,6 +27,9 @@ export default function PatientsPage() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>('all');
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const pageSize = 10;
 
   useEffect(() => {
     const loadPatients = async () => {
@@ -71,6 +74,23 @@ export default function PatientsPage() {
     });
   }, [patients, searchQuery]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredPatients.length / pageSize));
+
+  const paginatedPatients = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPatients.slice(start, start + pageSize);
+  }, [filteredPatients, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const handleRegisterPatient = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     // This would typically send data to an API endpoint
@@ -96,7 +116,7 @@ export default function PatientsPage() {
               <h1 className="hcp-page-title">Patients</h1>
               <p className="subtitle">{isLoading ? 'Loading...' : `${patients.length} patients in your care.`}</p>
             </div>
-            <button className="primary small" onClick={() => setShowRegisterModal(true)}>+ Register patient</button>
+            <button className="primary small" onClick={() => setShowRegisterModal(true)}>+ Add patient</button>
           </div>
 
           {error && (
@@ -121,7 +141,7 @@ export default function PatientsPage() {
               <div className="search-row" style={{ marginBottom: 16 }}>
                 <input
                   type="text"
-                  placeholder="Search by name, ID, Ghana Card"
+                  placeholder="Search by name, ID, hosp. number"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                 />
@@ -152,8 +172,8 @@ export default function PatientsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPatients.length > 0 ? (
-                    filteredPatients.map((patient) => (
+                  {paginatedPatients.length > 0 ? (
+                    paginatedPatients.map((patient) => (
                       <tr key={patient.id}>
                         <td>
                           <div className="table-name-cell">
@@ -186,6 +206,30 @@ export default function PatientsPage() {
                   )}
                 </tbody>
               </table>
+
+              {filteredPatients.length > pageSize && (
+                <div className="table-pagination-row">
+                  <button
+                    type="button"
+                    className="ghost small"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </button>
+                  <p className="text-muted" style={{ margin: 0 }}>
+                    Page {currentPage} of {totalPages}
+                  </p>
+                  <button
+                    type="button"
+                    className="ghost small"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -223,7 +267,12 @@ export default function PatientsPage() {
                     </label>
                     <label>
                       <span className="onboarding-field-label">Condition</span>
-                      <input name="condition" required placeholder="Hypertension / Diabetes" />
+                      <select name="condition" required defaultValue="">
+                        <option value="" disabled>Select condition</option>
+                        <option value="hypertension">Hypertension</option>
+                        <option value="diabetes">Diabetes</option>
+                        <option value="both">Hypertension and Diabetes</option>
+                      </select>
                     </label>
                   </div>
 

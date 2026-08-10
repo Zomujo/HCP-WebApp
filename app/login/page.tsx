@@ -1,16 +1,22 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../lib/AuthContext';
 import { useGoogleScript, signInWithGoogle } from '../lib/googleAuth';
 import { ROLE_CONFIG } from '../lib/config';
+import { ApiError, OtpRequiredError } from '../lib/api';
+
+const PENDING_GOOGLE_LINK_TOKEN_KEY = 'hcp-pending-google-link-token';
+const PENDING_OTP_CONTEXT_KEY = 'hcp-pending-otp-context';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { loginWithGoogle, isLoading, isAuthenticated, user } = useAuth();
+  const { login, loginWithGoogle, isLoading, isAuthenticated, user } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -28,10 +34,62 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, user, router]);
 
+  const handleEmailPasswordSignIn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    try {
+      setIsSubmitting(true);
+      setError('');
+      const loggedInUser = await login(email.trim(), password);
+      if (loggedInUser.needsOnboarding) {
+        router.push('/onboarding');
+        return;
+      }
+      router.push(ROLE_CONFIG[loggedInUser.role].defaultRoute);
+    } catch (err) {
+      if (err instanceof OtpRequiredError) {
+        sessionStorage.setItem(
+          PENDING_OTP_CONTEXT_KEY,
+          JSON.stringify({
+            flow: 'login',
+            identifier: email.trim(),
+            password,
+          })
+        );
+        router.push(`/auth/otp?flow=login&identifier=${encodeURIComponent(email.trim())}`);
+        return;
+      }
+
+      if (err instanceof ApiError && err.status === 401) {
+        setError('Invalid email or password. Please try again.');
+        return;
+      }
+
+      if (err instanceof ApiError && /otp|verification code|verify/i.test(err.message)) {
+        sessionStorage.setItem(
+          PENDING_OTP_CONTEXT_KEY,
+          JSON.stringify({
+            flow: 'login',
+            identifier: email.trim(),
+            password,
+          })
+        );
+        router.push(`/auth/otp?flow=login&identifier=${encodeURIComponent(email.trim())}`);
+        return;
+      }
+
+      const errorMessage = err instanceof Error ? err.message : 'Sign in failed';
+      setError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleGoogleSignIn = () => {
     signInWithGoogle(
       async (token: string) => {
         try {
+          setIsSubmitting(true);
           setError('');
           const loggedInUser = await loginWithGoogle(token);
           if (loggedInUser.needsOnboarding) {
@@ -40,9 +98,17 @@ export default function LoginPage() {
           }
           router.push(ROLE_CONFIG[loggedInUser.role].defaultRoute);
         } catch (err) {
+          if (err instanceof ApiError && err.status === 409) {
+            sessionStorage.setItem(PENDING_GOOGLE_LINK_TOKEN_KEY, token);
+            router.push('/login/google-link');
+            return;
+          }
+
           const errorMessage = err instanceof Error ? err.message : 'Google sign in failed';
           console.error('Google sign in error:', err);
           setError(errorMessage);
+        } finally {
+          setIsSubmitting(false);
         }
       },
       (message: string) => {
@@ -71,6 +137,44 @@ export default function LoginPage() {
             <p className="text-muted">Welcome back! Please enter your details.</p>
           </div>
 
+          <form className="auth-fields" onSubmit={handleEmailPasswordSignIn}>
+            <label>
+              <span className="block-label">Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                disabled={isSubmitting || isLoading}
+              />
+            </label>
+
+            <label>
+              <span className="block-label">Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                required
+                disabled={isSubmitting || isLoading}
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="auth-submit"
+              disabled={isSubmitting || isLoading}
+            >
+              {isSubmitting ? 'Signing in...' : 'Sign in'}
+            </button>
+          </form>
+
+          <p className="auth-divider">or continue with Google</p>
+
           <button 
             type="button"
             className="ghost auth-action-button"
@@ -80,11 +184,6 @@ export default function LoginPage() {
             <Image src="/GoogleIcon.png" alt="Google icon" width={18} height={18} />
             <span>Sign in with Google</span>
           </button>
-          <p className="auth-divider">Google authentication only</p>
-
-          <p className="text-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: '0.92rem' }}>
-            Email and password login is temporarily unavailable on this environment.
-          </p>
 
           {error && (
             <div style={{ 

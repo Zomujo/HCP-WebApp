@@ -122,7 +122,7 @@ export default function DashboardPage() {
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Dashboard</h1>
-              <p className="subtitle">A snapshot of your clinic workload and patient safety signals.</p>
+              <p className="subtitle">A snapshot of your clinic workload.</p>
             </div>
           </div>
 
@@ -157,10 +157,10 @@ export default function DashboardPage() {
               <section className="panel hcp-panel" style={{ marginTop: 18 }}>
                 <div className="panel-headline-row">
                   <div>
-                    <p className="panel-title">Patient Check-ins This Week</p>
-                    <p className="text-muted">{weeklyAppointments.reduce((sum, a) => sum + a.value, 0)} Total Check-ins</p>
+                    <p className="panel-title">Clinic Visits This Week</p>
+                    <p className="text-muted">{weeklyAppointments.reduce((sum, a) => sum + a.value, 0)} Total Appointments • Next: Today 1:30 PM</p>
                   </div>
-                  <Link href="/patients" className="text-link">See All Patients</Link>
+                  <Link href="/appointments" className="text-link">See All Appointments</Link>
                 </div>
 
                 <div className="week-grid-figma">
@@ -177,7 +177,7 @@ export default function DashboardPage() {
               <section className="panel hcp-panel" style={{ marginTop: 18 }}>
                 <div className="panel-headline-row" style={{ marginBottom: 10 }}>
                   <p className="panel-title">Recent Critical Readings</p>
-                  <Link href="/patients" className="text-link">See All Patients</Link>
+                  <Link href="/appointments" className="text-link">See All Appointments</Link>
                 </div>
 
                 <table className="table hcp-table">

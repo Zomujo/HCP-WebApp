@@ -610,12 +610,41 @@ button.small {
     margin-bottom: 5px;
   }
 
-  .auth-fields input {
+  .auth-fields input,
+  .auth-fields select {
     border-radius: 13px;
+    border: 1px solid #e0e4ec;
     border-color: #e0e4ec;
     padding: 13px 14px;
     font-size: 0.9rem;
     color: #364052;
+    width: 100%;
+    background: #fff;
+  }
+
+  .credentials-form {
+    display: grid;
+    gap: 10px;
+  }
+
+  .credentials-label {
+    font-size: 0.78rem;
+    color: #727b8d;
+    font-weight: 600;
+  }
+
+  .credentials-input {
+    border-radius: 13px;
+    border: 1px solid #e0e4ec;
+    padding: 13px 14px;
+    font-size: 0.9rem;
+    color: #364052;
+    outline: none;
+    transition: border-color 0.16s ease;
+  }
+
+  .credentials-input:focus {
+    border-color: #f0ae6a;
   }
 
   .auth-submit {
@@ -1518,6 +1547,10 @@ button.small {
 
 .legend-dot.systolic {
   background: #ef9a4c;
+}
+
+.legend-dot.taken {
+  background: #22c55e;
 }
 
 .legend-dot.diastolic {
@@ -2599,5 +2632,419 @@ body {
     gap: 8px;
     border-top: 1px solid #d6dae4;
     padding-top: 8px;
+  }
+}
+
+/* HCP full-platform refresh (screenshot-aligned) */
+body {
+  background: #d7d7d9;
+}
+
+.app-shell {
+  width: min(100%, 1360px);
+  margin: 6px auto;
+  border: 1px solid #d8deea;
+  background: #ffffff;
+}
+
+.content.hcp-page {
+  padding: 28px 24px;
+}
+
+.hcp-sidebar {
+  width: 215px;
+  margin: 0;
+  border-right: 1px solid #dbe2ef;
+  border-radius: 0;
+  background: #fdfcf9;
+  padding: 20px 12px;
+  box-shadow: none;
+}
+
+.sidebar-header {
+  margin-bottom: 12px;
+}
+
+.sidebar-brand-row p:first-child {
+  font-size: 1.95rem;
+  line-height: 1;
+}
+
+.sidebar-brand-row .text-muted {
+  color: #929cad;
+  font-size: 0.72rem;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 7px;
+  font-size: 0.86rem;
+  color: #525a68;
+}
+
+.nav-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.nav-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.nav-link.active,
+.nav-link:hover {
+  background: #fab56e;
+  color: #ffffff;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #dbe2ef;
+}
+
+.hcp-user-footer-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-logout {
+  border: 1px solid #dbe2ef;
+  background: #ffffff;
+  color: #4d5768;
+  border-radius: 12px;
+  min-height: 46px;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.sidebar-logout:hover {
+  border-color: #cfd7e6;
+  background: #fbfcff;
+}
+
+.avatar-badge {
+  width: 28px;
+  height: 28px;
+  font-size: 0.68rem;
+  background: #d8ecff;
+  color: #26496a;
+}
+
+.hcp-page {
+  width: min(100%, 1060px);
+}
+
+.hcp-page-title {
+  font-size: 2.75rem;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: #242b38;
+}
+
+.subtitle {
+  color: #6e7788;
+}
+
+button.primary.small,
+a.primary.small {
+  border-radius: 999px;
+  background: #f9b065;
+  color: #ffffff;
+  border: none;
+  padding: 10px 18px;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.panel.hcp-panel {
+  border-radius: 8px;
+  border: 1px solid #dbe2ef;
+  box-shadow: none;
+  padding: 16px;
+}
+
+.stats-row-figma {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.stat-box-figma {
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.stat-box-figma .overline {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+}
+
+.stat-value {
+  font-size: 2.4rem;
+}
+
+.text-link {
+  font-size: 0.74rem;
+  color: #f3ad64;
+}
+
+.week-grid-figma {
+  gap: 10px;
+}
+
+.week-cell {
+  padding: 10px 8px;
+  background: #fcfdff;
+}
+
+.week-cell strong {
+  font-size: 1.7rem;
+}
+
+.search-row input {
+  border-radius: 999px;
+  min-height: 42px;
+}
+
+.filter-pill {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  padding: 7px 12px;
+}
+
+.table.hcp-table {
+  border: 1px solid #dbe2ef;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hcp-table th,
+.hcp-table td {
+  font-size: 0.82rem;
+}
+
+.status-pill {
+  min-width: 56px;
+  font-size: 0.66rem;
+  padding: 5px 10px;
+}
+
+.status-critical {
+  background: #ffd3d3;
+  color: #b32222;
+}
+
+.status-silent {
+  background: #ececf5;
+  color: #6b6f82;
+}
+
+.status-stable {
+  background: #dbe3ff;
+  color: #4a5cb6;
+}
+
+.status-caution {
+  background: #ffe2c2;
+  color: #a26316;
+}
+
+.table-pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.table-pagination-row .ghost.small {
+  border-radius: 10px;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.appointment-modal-overlay {
+  width: min(100%, 820px);
+  padding: 0;
+  overflow: hidden;
+}
+
+.appointment-modal-overlay .modal-head-row {
+  padding: 20px 28px;
+  border-bottom: 1px solid #dbe2ef;
+}
+
+.appointment-modal-overlay form {
+  padding: 18px 28px 26px;
+  display: grid;
+  gap: 14px;
+}
+
+.appointment-modal-overlay textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.modal-actions {
+  margin-top: 2px;
+}
+
+.chat-layout-figma {
+  border: 1px solid #dbe2ef;
+  border-radius: 10px;
+}
+
+.chat-thread-column {
+  padding: 10px;
+}
+
+.chat-thread-item.active {
+  background: #f6f8fc;
+}
+
+.chat-canvas {
+  min-height: 360px;
+  background: #f6f8fc;
+  padding: 14px;
+}
+
+.message-bubble {
+  border-radius: 12px;
+}
+
+.message-to {
+  background: #4a4d53;
+}
+
+.chat-send-btn {
+  width: 44px;
+  padding: 10px 0;
+}
+
+.readings-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.readings-action-row input {
+  flex: 1;
+}
+
+.readings-action-clear,
+.readings-action-send {
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 10px 16px;
+  white-space: nowrap;
+}
+
+.readings-action-send {
+  border-radius: 999px;
+}
+
+.profile-wrap.profile-wrap-wide {
+  width: min(100%, 640px);
+  gap: 12px;
+}
+
+.profile-summary-card {
+  border-radius: 12px;
+}
+
+.profile-data-card {
+  border-radius: 12px;
+}
+
+.profile-photo {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+}
+
+.profile-signout {
+  width: 100%;
+  color: #dc6161;
+  border-radius: 12px;
+  border-color: #dbe2ef;
+}
+
+.profile-advanced {
+  border-radius: 12px;
+}
+
+.profile-advanced summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #2d3442;
+}
+
+.patient-head-title {
+  font-size: 2.2rem;
+}
+
+.patient-chip-row .badge {
+  font-size: 0.68rem;
+  padding: 4px 9px;
+}
+
+.patient-tab-nav {
+  margin-top: 10px;
+}
+
+.patient-tab-btn {
+  font-size: 0.83rem;
+}
+
+.latest-vitals-box {
+  background: #ffd2d0;
+}
+
+.latest-vitals-value {
+  font-size: 2.85rem;
+  margin: 4px 0 8px;
+}
+
+.adherence-grid {
+  gap: 6px;
+}
+
+.adherence-cell-dot {
+  height: 20px;
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    width: 100%;
+    margin: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .hcp-page-title {
+    font-size: 2rem;
+  }
+
+  .stats-row-figma {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-layout-figma,
+  .patient-overview-grid {
+    grid-template-columns: 1fr;
   }
 }

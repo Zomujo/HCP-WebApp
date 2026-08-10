@@ -6,18 +6,70 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../lib/AuthContext';
 import { useState } from 'react';
 
-const healthWorkerNavItems = [
-  { href: '/dashboard', label: 'Overview' },
-  { href: '/appointments', label: 'Appointments' },
-  { href: '/patients', label: 'Patients' },
-  { href: '/chats', label: 'Chats' },
-  { href: '/profile', label: 'Profile' },
+type NavIconName = 'overview' | 'appointments' | 'patients' | 'chats' | 'profile';
+
+interface NavItem {
+  href: string;
+  label: string;
+  icon: NavIconName;
+}
+
+function NavIcon({ name }: { name: NavIconName }) {
+  if (name === 'overview') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M3 9.5L12 3l9 6.5" />
+        <path d="M5.5 9v11h13V9" />
+      </svg>
+    );
+  }
+
+  if (name === 'appointments') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+        <path d="M7 3.5v3M17 3.5v3M3.5 9h17" />
+      </svg>
+    );
+  }
+
+  if (name === 'patients') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="8" r="3.2" />
+        <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" />
+      </svg>
+    );
+  }
+
+  if (name === 'chats') {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M4.5 6.5h15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-8l-4.5 3v-3H4.5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </svg>
+  );
+}
+
+const healthWorkerNavItems: NavItem[] = [
+  { href: '/dashboard', label: 'Overview', icon: 'overview' },
+  { href: '/appointments', label: 'Appointments', icon: 'appointments' },
+  { href: '/patients', label: 'Patients', icon: 'patients' },
+  { href: '/chats', label: 'Chats', icon: 'chats' },
+  { href: '/profile', label: 'Profile', icon: 'profile' },
 ];
 
-const pharmacyNavItems = [
-  { href: '/pharmacy/dashboard', label: 'Dashboard' },
-  { href: '/pharmacy/patients', label: 'Patients' },
-  { href: '/pharmacy/chats', label: 'Chats' },
+const pharmacyNavItems: NavItem[] = [
+  { href: '/pharmacy/dashboard', label: 'Dashboard', icon: 'overview' },
+  { href: '/pharmacy/patients', label: 'Patients', icon: 'patients' },
+  { href: '/pharmacy/chats', label: 'Chats', icon: 'chats' },
 ];
 
 export function Sidebar() {
@@ -32,9 +84,11 @@ export function Sidebar() {
   };
 
   const navItems = user?.role === 'pharmacy-personnel' ? pharmacyNavItems : healthWorkerNavItems;
-  const roleLabel = user?.role === 'pharmacy-personnel' ? 'Pharmacy Personnel' : 'Health Worker portal';
+  const roleLabel = user?.role === 'pharmacy-personnel' ? 'Pharmacy Personnel' : 'HCP portal';
   const facilityName = user?.facility?.name || 'Primary Facility';
-  const userName = user ? `${user.firstName || user.email?.split('@')[0] || 'User'}` : 'User';
+  const userName = user
+    ? `${user.firstName || user.email?.split('@')[0] || 'User'}${user.lastName ? ` ${user.lastName}` : ''}`
+    : 'User';
 
   return (
     <aside className="sidebar hcp-sidebar">
@@ -64,23 +118,24 @@ export function Sidebar() {
         <nav>
           {navItems.map((item) => (
             <Link key={item.href} href={item.href} className={`nav-link ${pathname === item.href ? 'active' : ''}`}>
+              <span className="nav-icon" aria-hidden>
+                <NavIcon name={item.icon} />
+              </span>
               {item.label}
             </Link>
           ))}
         </nav>
 
         <div className="sidebar-footer">
-          <div className="patient-pill">
-            <div className="avatar-badge">{(userName || 'U')[0]?.toUpperCase()}</div>
+          <div className="hcp-user-footer-card">
+            <div className="avatar-badge">{(userName || 'U').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>
             <div>
-              <p style={{ margin: 0, fontWeight: 700 }}>{userName}</p>
-              <p className="text-muted" style={{ margin: 0, fontSize: '0.9rem' }}>{facilityName}</p>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: '0.78rem' }}>{userName} (HCP)</p>
+              <p className="text-muted" style={{ margin: 0, fontSize: '0.76rem' }}>{facilityName}</p>
             </div>
           </div>
 
-          <button type="button" className="ghost small" onClick={handleLogout}>
-            Logout
-          </button>
+          <button type="button" className="ghost small sidebar-logout" onClick={handleLogout}>Logout</button>
         </div>
       </div>
     </aside>

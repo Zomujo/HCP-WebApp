@@ -115,7 +115,7 @@ export default function ChatsPage() {
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Patient messages</h1>
-              <p className="subtitle">Reply in plain language and keep the care conversation moving.</p>
+              <p className="subtitle">Reply in plain language</p>
             </div>
           </div>
 
@@ -180,7 +180,7 @@ export default function ChatsPage() {
                       <div className="table-avatar">{getInitials(selectedSession.name)}</div>
                       <div>
                         <p className="chat-thread-name">{selectedSession.name}</p>
-                        <p className="text-muted" style={{ margin: '2px 0 0' }}>Patient</p>
+                        <p className="text-muted" style={{ margin: '2px 0 0' }}>Hypertension</p>
                       </div>
                     </div>
 
@@ -220,11 +220,11 @@ export default function ChatsPage() {
                         disabled={isSending}
                       />
                       <button 
-                        className="primary small"
+                        className="primary small chat-send-btn"
                         onClick={handleSendMessage}
                         disabled={isSending || !messageText.trim()}
                       >
-                        {isSending ? '...' : 'Send'}
+                        {isSending ? '...' : '➤'}
                       </button>
                     </div>
                   </>

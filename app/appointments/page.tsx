@@ -203,7 +203,7 @@ export default function AppointmentsPage() {
                   <label>
                     <span className="onboarding-field-label">Patient</span>
                     <select name="patientId" required disabled={isSubmitting}>
-                      <option value="">Select a patient...</option>
+                      <option value="">Search patient by name</option>
                       {patients.map((patient) => (
                         <option key={patient.id} value={patient.id}>
                           {patient.firstName} {patient.lastName}
@@ -211,29 +211,25 @@ export default function AppointmentsPage() {
                       ))}
                     </select>
                   </label>
-                  <label>
-                    <span className="onboarding-field-label">Appointment Title</span>
-                    <input name="title" type="text" placeholder="e.g., Follow-up check" disabled={isSubmitting} />
-                  </label>
                   <div className="onboarding-grid-two">
                     <label>
                       <span className="onboarding-field-label">Date</span>
-                      <input name="date" type="date" required disabled={isSubmitting} />
+                      <input name="date" type="date" required placeholder="dd/mm/yyyy" disabled={isSubmitting} />
                     </label>
                     <label>
                       <span className="onboarding-field-label">Time</span>
-                      <input name="time" type="time" required disabled={isSubmitting} />
+                      <input name="time" type="time" required placeholder="--:--" disabled={isSubmitting} />
                     </label>
                   </div>
                   <label>
-                    <span className="onboarding-field-label">Description</span>
-                    <input name="notes" placeholder="Any additional notes..." disabled={isSubmitting} />
+                    <span className="onboarding-field-label">Notes for Patient (optional)</span>
+                    <textarea name="notes" placeholder="e.g Don&apos;t eat in the morning before you come." disabled={isSubmitting} />
                   </label>
 
                   <div className="modal-actions">
                     <button type="button" className="ghost small" onClick={() => setShowModal(false)} disabled={isSubmitting}>Cancel</button>
                     <button type="submit" className="primary small" disabled={isSubmitting}>
-                      {isSubmitting ? 'Saving...' : 'Save Appointment'}
+                      {isSubmitting ? 'Saving...' : 'Set Appointment'}
                     </button>
                   </div>
                 </form>

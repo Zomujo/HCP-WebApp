@@ -1,25 +1,87 @@
 "use client";
 
-import { useState } from 'react';
+import { FormEvent, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../lib/AuthContext';
 import { useGoogleScript, signInWithGoogle } from '../lib/googleAuth';
 import { ROLE_CONFIG } from '../lib/config';
+import { ApiError } from '../lib/api';
+
+const PENDING_GOOGLE_LINK_TOKEN_KEY = 'hcp-pending-google-link-token';
+const PENDING_OTP_CONTEXT_KEY = 'hcp-pending-otp-context';
 
 export default function SignupPage() {
   const router = useRouter();
-  const { loginWithGoogle, isLoading } = useAuth();
+  const { signup, loginWithGoogle, isLoading } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState<'health-worker' | 'pharmacy-personnel'>('health-worker');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useGoogleScript();
 
+  const handleEmailPasswordSignup = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
+      setError('Email is required.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setError('');
+      const signedUpUser = await signup({ email: normalizedEmail, password, role });
+
+      if (signedUpUser.needsOtpVerification) {
+        sessionStorage.setItem(
+          PENDING_OTP_CONTEXT_KEY,
+          JSON.stringify({
+            flow: 'signup',
+            identifier: normalizedEmail,
+            password,
+            role,
+          })
+        );
+        router.push(`/auth/otp?flow=signup&identifier=${encodeURIComponent(normalizedEmail)}`);
+        return;
+      }
+
+      if (signedUpUser.needsOnboarding) {
+        router.push('/onboarding');
+        return;
+      }
+
+      router.push(ROLE_CONFIG[signedUpUser.role].defaultRoute);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Signup failed';
+      setError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleGoogleSignUp = () => {
     signInWithGoogle(
       async (token: string) => {
         try {
+          setIsSubmitting(true);
           setError('');
           const loggedInUser = await loginWithGoogle(token);
           if (loggedInUser.needsOnboarding) {
@@ -28,9 +90,17 @@ export default function SignupPage() {
           }
           router.push(ROLE_CONFIG[loggedInUser.role].defaultRoute);
         } catch (err) {
+          if (err instanceof ApiError && err.status === 409) {
+            sessionStorage.setItem(PENDING_GOOGLE_LINK_TOKEN_KEY, token);
+            router.push('/login/google-link');
+            return;
+          }
+
           const errorMessage = err instanceof Error ? err.message : 'Google sign up failed';
           console.error('Google sign up error:', err);
           setError(errorMessage);
+        } finally {
+          setIsSubmitting(false);
         }
       },
       (message: string) => {
@@ -59,6 +129,69 @@ export default function SignupPage() {
             <p className="text-muted">Sign up to get started on your health worker journey.</p>
           </div>
 
+          <form className="auth-fields" onSubmit={handleEmailPasswordSignup}>
+            <label>
+              <span className="block-label">Email</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                disabled={isSubmitting || isLoading}
+              />
+            </label>
+
+            <label>
+              <span className="block-label">Password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                required
+                disabled={isSubmitting || isLoading}
+              />
+            </label>
+
+            <label>
+              <span className="block-label">Confirm Password</span>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Re-enter password"
+                autoComplete="new-password"
+                required
+                disabled={isSubmitting || isLoading}
+              />
+            </label>
+
+            <label>
+              <span className="block-label">Account Type</span>
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value as 'health-worker' | 'pharmacy-personnel')}
+                disabled={isSubmitting || isLoading}
+              >
+                <option value="health-worker">Health Worker</option>
+                <option value="pharmacy-personnel">Pharmacy Personnel</option>
+              </select>
+            </label>
+
+            <button
+              type="submit"
+              className="auth-submit"
+              disabled={isSubmitting || isLoading}
+            >
+              {isSubmitting ? 'Creating account...' : 'Create account'}
+            </button>
+          </form>
+
+          <p className="auth-divider">or continue with Google</p>
+
           <button 
             type="button"
             className="ghost auth-action-button"
@@ -68,11 +201,6 @@ export default function SignupPage() {
             <Image src="/GoogleIcon.png" alt="Google icon" width={18} height={18} />
             <span>Sign up with Google</span>
           </button>
-          <p className="auth-divider">Google authentication only</p>
-
-          <p className="text-muted" style={{ marginTop: 0, marginBottom: 16, fontSize: '0.92rem' }}>
-            Email and password signup is temporarily unavailable on this environment.
-          </p>
 
           {error && (
             <div style={{ 

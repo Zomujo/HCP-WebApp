@@ -16,6 +16,7 @@ interface User {
     name: string;
   };
   needsOnboarding?: boolean;
+  needsOtpVerification?: boolean;
 }
 
 interface AuthContextType {

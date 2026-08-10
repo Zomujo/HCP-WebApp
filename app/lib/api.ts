@@ -26,7 +26,73 @@ export interface AuthResponse {
       name: string;
     };
     needsOnboarding?: boolean;
+    needsOtpVerification?: boolean;
   };
+}
+
+export interface PersonnelAccount {
+  id: string;
+  createdAt?: string;
+  updatedAt?: string;
+  provider: string;
+  providerUserId?: string;
+  email: string;
+  personnel?: {
+    id: string;
+    userName?: string;
+    provider?: string;
+    providerUserId?: string;
+    email?: string;
+    facility?: {
+      id: string;
+      name: string;
+      phoneNumber?: string;
+    };
+  };
+}
+
+export interface PersonnelAccountListResult {
+  rows: PersonnelAccount[];
+  total: number;
+  pageSize: number;
+  page: number;
+  nextPage?: number | null;
+  prevPage?: number | null;
+  totalPages?: number;
+}
+
+export interface CreatePersonnelAccountInput {
+  provider: 'email' | 'google';
+  providerUserId?: string;
+  email: string;
+  password?: string;
+}
+
+export interface UpdatePersonnelAccountInput {
+  provider?: 'email' | 'google';
+  providerUserId?: string;
+  email?: string;
+  password?: string;
+}
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
+export class OtpRequiredError extends Error {
+  identifier: string;
+
+  constructor(identifier: string, message = 'OTP verification is required before continuing.') {
+    super(message);
+    this.name = 'OtpRequiredError';
+    this.identifier = identifier;
+  }
 }
 
 export interface Patient {
@@ -221,6 +287,37 @@ function mapRole(role?: string): 'health-worker' | 'pharmacy-personnel' {
   return 'health-worker';
 }
 
+function isOtpMessage(message?: string): boolean {
+  return typeof message === 'string' && /otp|verification code|verify/i.test(message);
+}
+
+function mapPersonnelAccount(raw: any): PersonnelAccount {
+  return {
+    id: raw?.id || '',
+    createdAt: raw?.createdAt,
+    updatedAt: raw?.updatedAt,
+    provider: raw?.provider || '',
+    providerUserId: raw?.providerUserId,
+    email: raw?.email || '',
+    personnel: raw?.personnel
+      ? {
+          id: raw.personnel.id,
+          userName: raw.personnel.userName,
+          provider: raw.personnel.provider,
+          providerUserId: raw.personnel.providerUserId,
+          email: raw.personnel.email,
+          facility: raw.personnel.facility
+            ? {
+                id: raw.personnel.facility.id,
+                name: raw.personnel.facility.name,
+                phoneNumber: raw.personnel.facility.phoneNumber,
+              }
+            : undefined,
+        }
+      : undefined,
+  };
+}
+
 function isLikelyJwt(token: string): boolean {
   // JWTs have 3 dot-separated base64url parts.
   return typeof token === 'string' && token.split('.').length === 3;
@@ -353,7 +450,8 @@ async function apiCall<T>(
   const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
 
   if (!response.ok) {
-    if (response.status === 401) {
+    const isAuthEndpoint = endpoint.startsWith('/api/v1/personnel/auth/');
+    if (response.status === 401 && !isAuthEndpoint) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('hcp-auth-token');
         localStorage.removeItem('hcp-user');
@@ -361,7 +459,7 @@ async function apiCall<T>(
         window.location.href = '/login';
       }
     }
-    throw new Error(await parseErrorMessage(response));
+    throw new ApiError(response.status, await parseErrorMessage(response));
   }
 
   // Some endpoints may return empty bodies
@@ -384,6 +482,9 @@ export const authApi = {
     const authPayload = extractAuthTokenPayload(response.data);
 
     if (!authPayload.token) {
+      if (isOtpMessage(response.message)) {
+        throw new OtpRequiredError(email, response.message || 'OTP sent to your email. Please verify to continue.');
+      }
       throw new Error(response.message || 'Login failed: no token returned');
     }
 
@@ -463,6 +564,10 @@ export const authApi = {
     }
   },
 
+  linkGoogleAccount: async (googleToken: string): Promise<void> => {
+    await personnelAccountsApi.linkGoogleAccount(googleToken);
+  },
+
   signup: async (data: { email: string; password: string; role: 'health-worker' | 'pharmacy-personnel' }): Promise<AuthResponse> => {
     const response = await apiCall<ApiResponse<string | AuthTokenPayload>>(
       '/api/v1/personnel/auth/signup',
@@ -472,11 +577,11 @@ export const authApi = {
 
     const authPayload = extractAuthTokenPayload(response.data);
 
-    if (!authPayload.personnelId && !authPayload.token) {
-      throw new Error(response.message || 'Signup failed: no token returned');
-    }
-
     if (!authPayload.token || !isLikelyJwt(authPayload.token)) {
+      if (!authPayload.personnelId && !isOtpMessage(response.message)) {
+        throw new Error(response.message || 'Signup failed: no token returned');
+      }
+
       return {
         token: '',
         user: {
@@ -485,6 +590,7 @@ export const authApi = {
           email: data.email,
           role: data.role,
           needsOnboarding: true,
+          needsOtpVerification: true,
         },
       };
     }
@@ -501,8 +607,25 @@ export const authApi = {
         personnelId: authPayload.personnelId || auth.user.personnelId,
         email: data.email,
         needsOnboarding: true,
+        needsOtpVerification: false,
       },
     };
+  },
+
+  resendOtp: async (identifier: string): Promise<void> => {
+    await apiCall<ApiResponse<unknown>>(
+      '/api/v1/personnel/auth/otp/re-send',
+      'POST',
+      { identifier }
+    );
+  },
+
+  verifyOtp: async (identifier: string, code: number): Promise<void> => {
+    await apiCall<ApiResponse<unknown>>(
+      '/api/v1/personnel/auth/otp/verify',
+      'POST',
+      { identifier, code }
+    );
   },
 
   onboard: async (data: {
@@ -579,6 +702,80 @@ export const authApi = {
       'GET'
     );
     return extractArray<any>(response.data);
+  },
+};
+
+export const personnelAccountsApi = {
+  create: async (data: CreatePersonnelAccountInput): Promise<string> => {
+    const response = await apiCall<ApiResponse<string>>(
+      '/api/v1/personnel-accounts',
+      'POST',
+      data
+    );
+    return response.data || '';
+  },
+
+  list: async (
+    page = 1,
+    pageSize = 10,
+    search?: string
+  ): Promise<PersonnelAccountListResult> => {
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('pageSize', String(pageSize));
+    if (search?.trim()) {
+      params.set('search', search.trim());
+    }
+
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel-accounts?${params.toString()}`,
+      'GET'
+    );
+
+    const data = response.data || {};
+    return {
+      rows: extractArray<any>(data).map(mapPersonnelAccount),
+      total: typeof data.total === 'number' ? data.total : 0,
+      pageSize: typeof data.pageSize === 'number' ? data.pageSize : pageSize,
+      page: typeof data.page === 'number' ? data.page : page,
+      nextPage: data.nextPage ?? null,
+      prevPage: data.prevPage ?? null,
+      totalPages: typeof data.totalPages === 'number' ? data.totalPages : undefined,
+    };
+  },
+
+  getById: async (id: string): Promise<PersonnelAccount> => {
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel-accounts/${id}`,
+      'GET'
+    );
+    return mapPersonnelAccount(response.data);
+  },
+
+  update: async (id: string, data: UpdatePersonnelAccountInput): Promise<string> => {
+    const response = await apiCall<ApiResponse<string>>(
+      `/api/v1/personnel-accounts/${id}`,
+      'PATCH',
+      data
+    );
+    return response.data || id;
+  },
+
+  remove: async (id: string): Promise<void> => {
+    await apiCall<ApiResponse<unknown>>(
+      `/api/v1/personnel-accounts/${id}`,
+      'DELETE'
+    );
+  },
+
+  linkGoogleAccount: async (googleToken: string): Promise<string> => {
+    const response = await apiCall<ApiResponse<string>>(
+      '/api/v1/personnel-accounts/google-link',
+      'POST',
+      {},
+      { idtoken: googleToken }
+    );
+    return response.data || '';
   },
 };
 
