@@ -146,7 +146,7 @@ export default function OnboardingPage() {
           <label>
             <span className="onboarding-field-label">Nurse Registration Number</span>
             <input 
-              placeholder="REG/002-57-99-100"
+              placeholder="RN/12345/2024"
               value={registrationNumber}
               onChange={(e) => setRegistrationNumber(e.target.value)}
               disabled={isSubmitting}
@@ -210,7 +210,7 @@ export default function OnboardingPage() {
     <main className="onboarding-page">
       <div className="onboarding-stage">
         <div className="onboarding-brand">
-          <Image src="/logo.png" alt="YELIMA logo" width={22} height={22} />
+          <Image src="/logo.png" alt="YELIMA logo" width={96} height={96} />
           <span>YELIMA</span>
         </div>
 

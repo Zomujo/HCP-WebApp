@@ -9,17 +9,69 @@ import { useAuth } from '../lib/AuthContext';
 import { hcpPatientApi } from '../lib/api';
 import type { Patient } from '../lib/api';
 
-type FilterKey = 'all' | 'hypertension' | 'diabetes' | 'both' | 'critical' | 'silent' | 'stable';
+type FilterKey =
+  | 'all'
+  | 'bp-normal'
+  | 'bp-elevated'
+  | 'bp-stage-1'
+  | 'bp-stage-2'
+  | 'bp-severe'
+  | 'glucose-critical-low'
+  | 'glucose-low'
+  | 'glucose-target'
+  | 'glucose-slightly-high'
+  | 'glucose-high'
+  | 'glucose-very-high'
+  | 'glucose-critical';
 
-const FILTER_OPTIONS: Array<{ key: FilterKey; label: string }> = [
-  { key: 'all', label: 'All' },
-  { key: 'hypertension', label: 'Hypertension' },
-  { key: 'diabetes', label: 'Diabetes' },
-  { key: 'both', label: 'Both' },
-  { key: 'critical', label: 'Critical' },
-  { key: 'silent', label: 'Silent' },
-  { key: 'stable', label: 'Stable' },
+const FILTER_GROUPS: Array<{ label: string; options: Array<{ key: FilterKey; label: string }> }> = [
+  {
+    label: 'Blood pressure',
+    options: [
+      { key: 'bp-normal', label: 'Normal' },
+      { key: 'bp-elevated', label: 'Elevated' },
+      { key: 'bp-stage-1', label: 'Stage 1 Hypertension' },
+      { key: 'bp-stage-2', label: 'Stage 2 Hypertension' },
+      { key: 'bp-severe', label: 'Severely High / Critical' },
+    ],
+  },
+  {
+    label: 'Blood glucose',
+    options: [
+      { key: 'glucose-critical-low', label: 'Critically Low' },
+      { key: 'glucose-low', label: 'Low' },
+      { key: 'glucose-target', label: 'In Target' },
+      { key: 'glucose-slightly-high', label: 'Slightly High' },
+      { key: 'glucose-high', label: 'High' },
+      { key: 'glucose-very-high', label: 'Very High' },
+      { key: 'glucose-critical', label: 'Critical' },
+    ],
+  },
 ];
+
+function matchesFilter(patient: Patient, filter: FilterKey): boolean {
+  if (filter === 'all') return true;
+  if (filter.startsWith('glucose-')) {
+    const glucose = patient.bloodSugar;
+    if (glucose === undefined) return false;
+    if (filter === 'glucose-critical-low') return glucose < 54;
+    if (filter === 'glucose-low') return glucose >= 54 && glucose <= 69;
+    if (filter === 'glucose-target') return glucose >= 80 && glucose <= 130;
+    if (filter === 'glucose-slightly-high') return glucose >= 131 && glucose <= 179;
+    if (filter === 'glucose-high') return glucose >= 180 && glucose <= 249;
+    if (filter === 'glucose-very-high') return glucose >= 250 && glucose <= 299;
+    return glucose >= 300;
+  }
+
+  const bloodPressure = patient.vitals;
+  if (!bloodPressure) return false;
+  const { systolic, diastolic } = bloodPressure;
+  if (filter === 'bp-normal') return systolic < 120 && diastolic < 80;
+  if (filter === 'bp-elevated') return systolic >= 120 && systolic <= 129 && diastolic < 80;
+  if (filter === 'bp-stage-1') return (systolic >= 130 && systolic <= 139) || (diastolic >= 80 && diastolic <= 89);
+  if (filter === 'bp-stage-2') return (systolic >= 140 && systolic < 180) || (diastolic >= 90 && diastolic < 120);
+  return systolic >= 180 || diastolic >= 120;
+}
 
 export default function PatientsPage() {
   const router = useRouter();
@@ -42,15 +94,7 @@ export default function PatientsPage() {
         setError('');
 
         const facilityId = user?.facilityId || user?.facility?.id;
-        const data =
-          activeFilter === 'all'
-            ? await hcpPatientApi.getPatients(1, 100, facilityId)
-            : await hcpPatientApi.getPatientsWithOptions({
-                page: 1,
-                pageSize: 100,
-                filterBy: activeFilter,
-                facilityId,
-              });
+        const data = await hcpPatientApi.getPatients(1, 100, facilityId);
 
         setPatients(data);
       } catch (err) {
@@ -62,15 +106,13 @@ export default function PatientsPage() {
     };
 
     loadPatients();
-  }, [activeFilter, user?.facilityId, user?.facility?.id]);
+  }, [user?.facilityId, user?.facility?.id]);
 
   const filteredPatients = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return patients;
-    }
-
     return patients.filter((patient) => {
+      if (!matchesFilter(patient, activeFilter)) return false;
+      if (!query) return true;
       const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase();
       return (
         fullName.includes(query) ||
@@ -78,7 +120,7 @@ export default function PatientsPage() {
         (patient.ghanaCard || '').toLowerCase().includes(query)
       );
     });
-  }, [patients, searchQuery]);
+  }, [patients, searchQuery, activeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredPatients.length / pageSize));
 
@@ -151,16 +193,24 @@ export default function PatientsPage() {
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                 />
-                <div className="filter-row">
-                  {FILTER_OPTIONS.map((filter) => (
-                    <button
-                      key={filter.key}
-                      type="button"
-                      className={`filter-pill ${activeFilter === filter.key ? 'active' : ''}`}
-                      onClick={() => setActiveFilter(filter.key)}
-                    >
-                      {filter.label}
-                    </button>
+                <div className="filter-groups" aria-label="Clinical filters">
+                  <button type="button" className={`filter-pill ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => setActiveFilter('all')}>All</button>
+                  {FILTER_GROUPS.map((group) => (
+                    <div key={group.label} className="filter-group">
+                      <span className="filter-group-label">{group.label}</span>
+                      <div className="filter-row">
+                        {group.options.map((filter) => (
+                          <button
+                            key={filter.key}
+                            type="button"
+                            className={`filter-pill ${activeFilter === filter.key ? 'active' : ''}`}
+                            onClick={() => setActiveFilter(filter.key)}
+                          >
+                            {filter.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>

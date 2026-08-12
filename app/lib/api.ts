@@ -117,6 +117,7 @@ export interface Patient {
     diastolic: number;
     note: string;
   };
+  bloodSugar?: number;
 }
 
 export interface Appointment {
@@ -275,6 +276,10 @@ function mapPatient(raw: any): Patient {
     typeof adherenceRate === 'number'
       ? `${Math.round(adherenceRate)}%`
       : adherenceRate || undefined;
+  const latestVitals = raw.vitals || raw.latestVitals || {};
+  const bloodPressure = String(latestVitals.bloodPressure || raw.bloodPressure || '').match(/(\d{2,3})\s*[/|]\s*(\d{2,3})/);
+  const bloodSugarValue = latestVitals.bloodSugar ?? latestVitals.glucose ?? raw.bloodSugar ?? raw.glucose;
+  const bloodSugar = Number(bloodSugarValue);
 
   return {
     id: raw.id,
@@ -292,6 +297,10 @@ function mapPatient(raw: any): Patient {
     facility: raw.facility?.name || raw.facility,
     criticalReadingsCount: typeof raw.criticalReadingsCount === 'number' ? raw.criticalReadingsCount : undefined,
     assignedToYou: typeof raw.assignedToYou === 'boolean' ? raw.assignedToYou : undefined,
+    vitals: bloodPressure
+      ? { systolic: Number(bloodPressure[1]), diastolic: Number(bloodPressure[2]), note: latestVitals.note || '' }
+      : undefined,
+    bloodSugar: Number.isFinite(bloodSugar) ? bloodSugar : undefined,
   };
 }
 

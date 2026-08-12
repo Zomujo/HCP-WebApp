@@ -11,6 +11,36 @@ import type { Patient, Appointment, Medication } from '../../lib/api';
 const tabs = ['Overview', 'Readings', 'Medication', 'Appointments', 'Chat'] as const;
 type TabName = (typeof tabs)[number];
 
+interface BloodPressureReading {
+  recordedAt: string;
+  systolic: number;
+  diastolic: number;
+}
+
+function parseBloodPressure(value: unknown): { systolic: number; diastolic: number } | null {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/(\d{2,3})\s*[/|]\s*(\d{2,3})/);
+  if (!match) return null;
+  return { systolic: Number(match[1]), diastolic: Number(match[2]) };
+}
+
+function mapBloodPressureLogs(logs: any[]): BloodPressureReading[] {
+  return logs
+    .map((log) => {
+      const bloodPressure = log.vitals?.find((vital: any) =>
+        String(vital.vitalType || vital.type || '').toLowerCase().includes('bloodpressure')
+      );
+      const parsed = parseBloodPressure(bloodPressure?.value || log.bloodPressure || log.value);
+      if (!parsed) return null;
+      return {
+        ...parsed,
+        recordedAt: log.recordedAt || log.createdAt || log.date || new Date().toISOString(),
+      };
+    })
+    .filter((reading): reading is BloodPressureReading => reading !== null)
+    .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
+}
+
 function formatAppointmentDate(value?: string): string {
   if (!value) return 'Unknown date';
   const parsed = new Date(value);
@@ -32,6 +62,7 @@ export default function PatientDetailsPage() {
   const [activeTab, setActiveTab] = useState<TabName>('Overview');
   const [patient, setPatient] = useState<Patient | null>(null);
   const [vitals, setVitals] = useState<any[]>([]);
+  const [bloodPressureReadings, setBloodPressureReadings] = useState<BloodPressureReading[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -51,15 +82,17 @@ export default function PatientDetailsPage() {
         setIsLoading(true);
         setError('');
 
-        const [patientData, vitalsData, appointmentsData, medicationsData] = await Promise.all([
+        const [patientData, vitalsData, vitalLogs, appointmentsData, medicationsData] = await Promise.all([
           hcpPatientApi.getPatientById(patientId),
           hcpPatientApi.getPatientVitals(patientId).catch(() => []),
+          hcpPatientApi.getPatientVitalHistoryLogs(patientId).catch(() => []),
           hcpPatientApi.getPatientAppointments(patientId),
           hcpPatientApi.getPatientMedications(patientId),
         ]);
 
         setPatient(patientData);
         setVitals(Array.isArray(vitalsData) ? vitalsData : []);
+        setBloodPressureReadings(mapBloodPressureLogs(Array.isArray(vitalLogs) ? vitalLogs : []));
         setAppointments(appointmentsData);
         setMedications(medicationsData);
       } catch (err) {
@@ -128,6 +161,8 @@ export default function PatientDetailsPage() {
       setVitalForm({ bloodPressure: '', heartRate: '', notes: '' });
       const refreshedVitals = await hcpPatientApi.getPatientVitals(patientId).catch(() => []);
       setVitals(Array.isArray(refreshedVitals) ? refreshedVitals : []);
+      const refreshedLogs = await hcpPatientApi.getPatientVitalHistoryLogs(patientId).catch(() => []);
+      setBloodPressureReadings(mapBloodPressureLogs(Array.isArray(refreshedLogs) ? refreshedLogs : []));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save patient vitals');
     } finally {
@@ -181,7 +216,11 @@ export default function PatientDetailsPage() {
 
   const upcoming = appointments.filter((a) => a.status === 'scheduled' || a.status === 'active');
   const past = appointments.filter((a) => a.status === 'completed' || a.status === 'cancelled');
-  const chartData = [120, 180, 150, 380, 250, 210, 240, 140, 440, 320, 340, 305];
+  const chartReadings = bloodPressureReadings.length > 0 ? bloodPressureReadings : [
+    { recordedAt: new Date().toISOString(), systolic: patient.vitals?.systolic || 168, diastolic: patient.vitals?.diastolic || 102 },
+  ];
+  const chartMax = Math.max(180, ...chartReadings.map((reading) => reading.systolic + 20));
+  const chartY = (value: number) => 205 - (value / chartMax) * 170;
   const currentBloodPressure = patient?.vitals?.systolic && patient?.vitals?.diastolic
     ? `${patient.vitals.systolic} / ${patient.vitals.diastolic}`
     : '168 / 102';
@@ -286,26 +325,45 @@ export default function PatientDetailsPage() {
                       <line key={`v-${index}`} x1={60 + index * 56} y1="30" x2={60 + index * 56} y2="205" className="chart-grid-line" />
                     ))}
 
-                    {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, index) => (
-                      <text key={month} x={60 + index * 56} y="225" textAnchor="middle" className="chart-axis-text">{month}</text>
+                    {chartReadings.map((reading, index) => (
+                      <text key={reading.recordedAt + index} x={60 + (index * 620) / Math.max(1, chartReadings.length - 1)} y="225" textAnchor="middle" className="chart-axis-text">
+                        {new Date(reading.recordedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </text>
                     ))}
 
-                    <text x="20" y="118" className="chart-axis-text">Blood Pressure</text>
+                    <text x="8" y="118" className="chart-axis-text">mmHg</text>
 
                     <polyline
                       className="chart-line-systolic"
-                      points={chartData.map((value, index) => `${60 + index * 56},${205 - (value / 500) * 170}`).join(' ')}
+                      points={chartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, chartReadings.length - 1)},${chartY(reading.systolic)}`).join(' ')}
                     />
-                    {chartData.map((value, index) => (
+                    <polyline
+                      className="chart-line-diastolic"
+                      points={chartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, chartReadings.length - 1)},${chartY(reading.diastolic)}`).join(' ')}
+                    />
+                    {chartReadings.map((reading, index) => (
                       <circle
-                        key={`d-${index}`}
+                        key={`s-${reading.recordedAt}-${index}`}
                         className="chart-dot-systolic"
-                        cx={60 + index * 56}
-                        cy={205 - (value / 500) * 170}
+                        cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
+                        cy={chartY(reading.systolic)}
+                        r="3.2"
+                      />
+                    ))}
+                    {chartReadings.map((reading, index) => (
+                      <circle
+                        key={`d-${reading.recordedAt}-${index}`}
+                        className="chart-dot-diastolic"
+                        cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
+                        cy={chartY(reading.diastolic)}
                         r="3.2"
                       />
                     ))}
                   </svg>
+                </div>
+                <div className="readings-legend-row">
+                  <span className="readings-legend-item"><span className="legend-dot systolic" /> Systolic (top)</span>
+                  <span className="readings-legend-item"><span className="legend-dot diastolic" /> Diastolic (bottom)</span>
                 </div>
               </div>
 
@@ -379,10 +437,10 @@ export default function PatientDetailsPage() {
                 </div>
               </div>
 
-              {['161 / 98', '152 / 94', '145 / 91', '138 / 86'].map((bp, index) => (
-                <div key={bp} className="reading-mini-card">
-                  <p><strong>BP</strong> {bp} mmHg</p>
-                  <p className="text-muted" style={{ marginTop: 4 }}>{index + 1} day(s) ago · AI check-in</p>
+              {bloodPressureReadings.slice(-4).reverse().map((reading) => (
+                <div key={reading.recordedAt} className="reading-mini-card">
+                  <p><strong>BP</strong> {reading.systolic} / {reading.diastolic} mmHg</p>
+                  <p className="text-muted" style={{ marginTop: 4 }}>{formatAppointmentDate(reading.recordedAt)}</p>
                 </div>
               ))}
             </section>
