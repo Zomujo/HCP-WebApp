@@ -3,10 +3,12 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
+import { useAuth } from '../lib/AuthContext';
 import { hcpPatientApi } from '../lib/api';
 import type { Appointment } from '../lib/api';
 
 export default function AppointmentsPage() {
+  const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,7 +24,8 @@ export default function AppointmentsPage() {
         setIsLoading(true);
         setError('');
 
-        const patientData = await hcpPatientApi.getPatients(1, 50);
+        const facilityId = user?.facilityId || user?.facility?.id;
+        const patientData = await hcpPatientApi.getPatients(1, 50, facilityId);
         setPatients(patientData);
 
         // Aggregate upcoming appointments across patients
@@ -51,7 +54,7 @@ export default function AppointmentsPage() {
     };
 
     loadData();
-  }, []);
+  }, [user?.facilityId, user?.facility?.id]);
 
   const filteredAppointments = appointments.filter((appt) => {
     const query = searchQuery.toLowerCase();

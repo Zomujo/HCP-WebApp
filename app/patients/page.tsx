@@ -1,9 +1,11 @@
 "use client";
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
+import { useAuth } from '../lib/AuthContext';
 import { hcpPatientApi } from '../lib/api';
 import type { Patient } from '../lib/api';
 
@@ -20,6 +22,8 @@ const FILTER_OPTIONS: Array<{ key: FilterKey; label: string }> = [
 ];
 
 export default function PatientsPage() {
+  const router = useRouter();
+  const { user } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,13 +41,15 @@ export default function PatientsPage() {
         setIsLoading(true);
         setError('');
 
+        const facilityId = user?.facilityId || user?.facility?.id;
         const data =
           activeFilter === 'all'
-            ? await hcpPatientApi.getPatients(1, 100)
+            ? await hcpPatientApi.getPatients(1, 100, facilityId)
             : await hcpPatientApi.getPatientsWithOptions({
                 page: 1,
                 pageSize: 100,
                 filterBy: activeFilter,
+                facilityId,
               });
 
         setPatients(data);
@@ -56,7 +62,7 @@ export default function PatientsPage() {
     };
 
     loadPatients();
-  }, [activeFilter]);
+  }, [activeFilter, user?.facilityId, user?.facility?.id]);
 
   const filteredPatients = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -174,7 +180,11 @@ export default function PatientsPage() {
                 <tbody>
                   {paginatedPatients.length > 0 ? (
                     paginatedPatients.map((patient) => (
-                      <tr key={patient.id}>
+                      <tr
+                        key={patient.id}
+                        onClick={() => router.push(`/patients/${patient.id}`)}
+                        style={{ cursor: 'pointer' }}
+                      >
                         <td>
                           <div className="table-name-cell">
                             <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
@@ -191,7 +201,11 @@ export default function PatientsPage() {
                           </span>
                         </td>
                         <td className="row-arrow">
-                          <Link href={`/patients/${patient.id}`} aria-label={`Open patient details`}>
+                          <Link
+                            href={`/patients/${patient.id}`}
+                            aria-label={`Open patient details`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
                             &gt;
                           </Link>
                         </td>

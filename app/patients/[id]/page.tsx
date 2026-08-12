@@ -38,6 +38,12 @@ export default function PatientDetailsPage() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [readingComment, setReadingComment] = useState('');
+  const [vitalForm, setVitalForm] = useState({
+    bloodPressure: '',
+    heartRate: '',
+    notes: '',
+  });
+  const [isSavingVitals, setIsSavingVitals] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -79,6 +85,53 @@ export default function PatientDetailsPage() {
       setError(err instanceof Error ? err.message : 'Failed to cancel appointment');
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const handleSaveVitals = async () => {
+    try {
+      setIsSavingVitals(true);
+      setError('');
+
+      const vitalsToSave = [] as Array<{ vitalType: string; value: string; unit?: string; severity?: 'normal' | 'warning' | 'critical' }>;
+
+      if (vitalForm.bloodPressure.trim()) {
+        vitalsToSave.push({
+          vitalType: 'bloodPressure',
+          value: vitalForm.bloodPressure.trim(),
+          unit: 'mmHg',
+          severity: 'normal',
+        });
+      }
+
+      if (vitalForm.heartRate.trim()) {
+        vitalsToSave.push({
+          vitalType: 'heartRate',
+          value: vitalForm.heartRate.trim(),
+          unit: 'bpm',
+          severity: 'normal',
+        });
+      }
+
+      if (vitalsToSave.length === 0) {
+        setError('Enter at least one vital reading before saving.');
+        return;
+      }
+
+      await hcpPatientApi.createVitalHistory({
+        patientId,
+        recordedAt: new Date().toISOString(),
+        notes: vitalForm.notes.trim() || 'Vitals recorded by clinician.',
+        vitals: vitalsToSave,
+      });
+
+      setVitalForm({ bloodPressure: '', heartRate: '', notes: '' });
+      const refreshedVitals = await hcpPatientApi.getPatientVitals(patientId).catch(() => []);
+      setVitals(Array.isArray(refreshedVitals) ? refreshedVitals : []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save patient vitals');
+    } finally {
+      setIsSavingVitals(false);
     }
   };
 
@@ -274,6 +327,55 @@ export default function PatientDetailsPage() {
                   />
                   <button className="ghost small readings-action-clear" type="button" onClick={() => setReadingComment('')}>Clear</button>
                   <button className="primary small readings-action-send" type="button">Send to patient</button>
+                </div>
+              </div>
+
+              <div className="panel hcp-panel" style={{ marginTop: 18 }}>
+                <div className="panel-headline-row" style={{ marginBottom: 12 }}>
+                  <p className="panel-title">Record patient vitals</p>
+                </div>
+
+                <div className="onboarding-grid-two">
+                  <label>
+                    <span className="onboarding-field-label">Blood pressure</span>
+                    <input
+                      type="text"
+                      value={vitalForm.bloodPressure}
+                      onChange={(event) => setVitalForm((prev) => ({ ...prev, bloodPressure: event.target.value }))}
+                      placeholder="120/80"
+                    />
+                  </label>
+
+                  <label>
+                    <span className="onboarding-field-label">Heart rate</span>
+                    <input
+                      type="text"
+                      value={vitalForm.heartRate}
+                      onChange={(event) => setVitalForm((prev) => ({ ...prev, heartRate: event.target.value }))}
+                      placeholder="72 bpm"
+                    />
+                  </label>
+                </div>
+
+                <label style={{ marginTop: 12, display: 'block' }}>
+                  <span className="onboarding-field-label">Notes</span>
+                  <textarea
+                    value={vitalForm.notes}
+                    onChange={(event) => setVitalForm((prev) => ({ ...prev, notes: event.target.value }))}
+                    placeholder="Patient was resting during measurement..."
+                    rows={3}
+                  />
+                </label>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                  <button
+                    type="button"
+                    className="primary small"
+                    onClick={handleSaveVitals}
+                    disabled={isSavingVitals}
+                  >
+                    {isSavingVitals ? 'Saving...' : 'Save vitals'}
+                  </button>
                 </div>
               </div>
 

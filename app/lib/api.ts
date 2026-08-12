@@ -139,6 +139,7 @@ export interface PatientQueryOptions {
   filterBy?: 'hypertension' | 'diabetes' | 'both' | 'critical' | 'silent' | 'stable';
   orderBy?: string;
   orderDirection?: 'asc' | 'desc';
+  facilityId?: string;
 }
 
 export interface Medication {
@@ -147,6 +148,20 @@ export interface Medication {
   dose: string;
   frequency: string;
   adherence?: string;
+}
+
+export interface VitalEntry {
+  vitalType: string;
+  value: string;
+  unit?: string;
+  severity?: 'normal' | 'warning' | 'critical';
+}
+
+export interface CreateVitalHistoryInput {
+  patientId: string;
+  recordedAt: string;
+  notes?: string;
+  vitals: VitalEntry[];
 }
 
 export interface PharmacyAnalytics {
@@ -781,9 +796,18 @@ export const personnelAccountsApi = {
 
 // HCP Patient APIs
 export const hcpPatientApi = {
-  getPatients: async (page = 1, limit = 50): Promise<Patient[]> => {
+  getPatients: async (page = 1, limit = 50, facilityId?: string): Promise<Patient[]> => {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(limit),
+    });
+
+    if (facilityId) {
+      params.set('facilityId', facilityId);
+    }
+
     const response = await apiCall<ApiResponse<any>>(
-      `/api/v1/hcp/patients?page=${page}&pageSize=${limit}`,
+      `/api/v1/hcp/patients?${params.toString()}`,
       'GET'
     );
 
@@ -798,6 +822,7 @@ export const hcpPatientApi = {
     if (options.filterBy) params.set('filterBy', options.filterBy);
     if (options.orderBy) params.set('orderBy', options.orderBy);
     if (options.orderDirection) params.set('orderDirection', options.orderDirection);
+    if (options.facilityId) params.set('facilityId', options.facilityId);
 
     const qs = params.toString() ? `?${params.toString()}` : '';
     const response = await apiCall<ApiResponse<any>>(
@@ -808,9 +833,10 @@ export const hcpPatientApi = {
     return extractArray<any>(response.data).map(mapPatient);
   },
 
-  getPatientsNoPaginate: async (search?: string): Promise<Array<{ id: string; name: string; patientCode?: string }>> => {
+  getPatientsNoPaginate: async (search?: string, facilityId?: string): Promise<Array<{ id: string; name: string; patientCode?: string }>> => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
+    if (facilityId) params.set('facilityId', facilityId);
     const qs = params.toString() ? `?${params.toString()}` : '';
 
     const response = await apiCall<ApiResponse<any>>(
@@ -900,6 +926,15 @@ export const hcpPatientApi = {
       'GET'
     );
     return response.data;
+  },
+
+  createVitalHistory: async (data: CreateVitalHistoryInput): Promise<string> => {
+    const response = await apiCall<ApiResponse<string>>(
+      '/api/v1/hcp/vital-histories',
+      'POST',
+      data
+    );
+    return response.data || '';
   },
 
   getVitalHistoryTrends: async (

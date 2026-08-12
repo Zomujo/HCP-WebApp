@@ -210,6 +210,11 @@ export default function LoginPage() {
           </div>
         </section>
       </div>
+
+      <div className="auth-support">
+        <span>supported by</span>
+        <strong>AYA Integrated Healthcare Initiative</strong>
+      </div>
     </main>
   );
 }

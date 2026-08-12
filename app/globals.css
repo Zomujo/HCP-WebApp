@@ -477,18 +477,44 @@ button.small {
 
 .auth-page {
   min-height: 100vh;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   padding: 0;
   background: #f4f3f1;
 }
 
 .auth-container {
   width: 100%;
-  min-height: 100vh;
+  min-height: calc(100vh - 90px);
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
   align-items: center;
+}
+
+.auth-support {
+  width: 100%;
+  text-align: center;
+  padding: 0 0 20px;
+  color: #2d3142;
+}
+
+.auth-support span {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: lowercase;
+  color: #7a7f8b;
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+
+.auth-support strong {
+  display: block;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: #2d3142;
+  letter-spacing: -0.02em;
 }
 
 .auth-form-shell {

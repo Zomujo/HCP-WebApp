@@ -227,6 +227,11 @@ export default function SignupPage() {
           </div>
         </section>
       </div>
+
+      <div className="auth-support">
+        <span>supported by</span>
+        <strong>AYA Integrated Healthcare Initiative</strong>
+      </div>
     </main>
   );
 }

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
+import { useAuth } from '../lib/AuthContext';
 import { hcpPatientApi } from '../lib/api';
 
 interface DashboardStats {
@@ -55,6 +57,8 @@ function buildWeeklyCheckInData(lastCheckInDates: string[]): Appointment[] {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats[]>([]);
@@ -67,8 +71,8 @@ export default function DashboardPage() {
         setIsLoading(true);
         setError('');
 
-        // Fetch patients
-        const patients = await hcpPatientApi.getPatients(1, 50);
+        // Fetch patients for the current facility when available
+        const patients = await hcpPatientApi.getPatients(1, 50, user?.facilityId || user?.facility?.id);
         
         // Ensure patients is an array
         if (!Array.isArray(patients)) {
@@ -195,7 +199,11 @@ export default function DashboardPage() {
                   <tbody>
                     {recentReadings.length > 0 ? (
                       recentReadings.map((patient) => (
-                        <tr key={patient.id}>
+                        <tr
+                          key={patient.id}
+                          onClick={() => router.push(`/patients/${patient.id}`)}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <td>
                             <div className="table-name-cell">
                               <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
@@ -212,7 +220,9 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className="row-arrow">
-                            <Link href={`/patients/${patient.id}`}>&gt;</Link>
+                            <Link href={`/patients/${patient.id}`} onClick={(event) => event.stopPropagation()}>
+                              &gt;
+                            </Link>
                           </td>
                         </tr>
                       ))
