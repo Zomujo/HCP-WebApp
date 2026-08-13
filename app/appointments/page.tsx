@@ -13,6 +13,7 @@ export default function AppointmentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [timeFilter, setTimeFilter] = useState<'all' | 'upcoming' | 'past'>('upcoming');
   const [showModal, setShowModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [patients, setPatients] = useState<any[]>([]);
@@ -25,14 +26,30 @@ export default function AppointmentsPage() {
         setError('');
 
         const facilityId = user?.facilityId || user?.facility?.id;
-        const patientData = await hcpPatientApi.getPatients(1, 50, facilityId);
+        if (!facilityId) {
+          setPatients([]);
+          setAppointments([]);
+          return;
+        }
+
+        const patientData = await hcpPatientApi.getPatientsWithOptions({
+          page: 1,
+          pageSize: 50,
+          facilityId,
+        });
         setPatients(patientData);
 
-        // Aggregate upcoming appointments across patients
         const appointmentLists = await Promise.all(
           patientData.slice(0, 20).map(async (patient) => {
             try {
-              const appts = await hcpPatientApi.getPatientAppointments(patient.id, 'upcoming');
+              const appts = await hcpPatientApi.getPatientAppointments(
+                patient.id,
+                timeFilter === 'all' ? undefined : timeFilter,
+                undefined,
+                1,
+                50
+              );
+
               return appts.map((appt) => ({
                 ...appt,
                 patientId: patient.id,
@@ -44,7 +61,8 @@ export default function AppointmentsPage() {
           })
         );
 
-        setAppointments(appointmentLists.flat());
+        const nextAppointments = appointmentLists.flat().sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+        setAppointments(nextAppointments);
       } catch (err) {
         console.error('Failed to load data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load appointments');
@@ -54,11 +72,16 @@ export default function AppointmentsPage() {
     };
 
     loadData();
-  }, [user?.facilityId, user?.facility?.id]);
+  }, [user?.facilityId, user?.facility?.id, timeFilter]);
 
   const filteredAppointments = appointments.filter((appt) => {
-    const query = searchQuery.toLowerCase();
-    return (appt.patientName?.toLowerCase().includes(query) || false);
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      appt.patientName?.toLowerCase().includes(query) ||
+      appt.title?.toLowerCase().includes(query) ||
+      false
+    );
   });
 
   const handleCancelAppointment = async (appointment: Appointment) => {
@@ -117,7 +140,9 @@ export default function AppointmentsPage() {
       ]);
 
       setShowModal(false);
-      event.currentTarget.reset();
+      if (event.currentTarget) {
+        event.currentTarget.reset();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create appointment');
     } finally {
@@ -165,6 +190,22 @@ export default function AppointmentsPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
+                </div>
+
+                <div className="filter-row" style={{ display: 'flex', gap: '12px', marginBottom: 16, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem' }}>
+                    <span>Time</span>
+                    <select
+                      value={timeFilter}
+                      onChange={(e) => setTimeFilter(e.target.value as 'all' | 'upcoming' | 'past')}
+                      style={{ minWidth: 120 }}
+                    >
+                      <option value="all">All</option>
+                      <option value="upcoming">Upcoming</option>
+                      <option value="past">Past</option>
+                    </select>
+                  </label>
+
                 </div>
 
                 <div className="list-card">

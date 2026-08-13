@@ -94,7 +94,17 @@ export default function PatientsPage() {
         setError('');
 
         const facilityId = user?.facilityId || user?.facility?.id;
-        const data = await hcpPatientApi.getPatients(1, 100, facilityId);
+        if (!facilityId) {
+          setPatients([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const data = await hcpPatientApi.getPatientsWithOptions({
+          page: 1,
+          pageSize: 100,
+          facilityId,
+        });
 
         setPatients(data);
       } catch (err) {
@@ -215,7 +225,7 @@ export default function PatientsPage() {
                 </div>
               </div>
 
-              <table className="table hcp-table">
+              <table className="table hcp-table hcp-patients-table">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -318,7 +328,26 @@ export default function PatientsPage() {
                   </button>
                 </div>
 
-                <form onSubmit={handleRegisterPatient}>
+                <form
+                  onSubmit={(event) => {
+                    const form = event.currentTarget;
+                    const phoneInput = form.elements.namedItem('phone') as HTMLInputElement | null;
+                    const phoneValue = phoneInput?.value?.trim() || '';
+
+                    if (phoneValue && !/^\+233\d{9}$/.test(phoneValue)) {
+                      event.preventDefault();
+                      phoneInput?.setCustomValidity('Use the format +233XXXXXXXXX');
+                      phoneInput?.reportValidity();
+                      return;
+                    }
+
+                    if (phoneInput) {
+                      phoneInput.setCustomValidity('');
+                    }
+
+                    handleRegisterPatient(event);
+                  }}
+                >
                   <label>
                     <span className="onboarding-field-label">Full name</span>
                     <input name="fullName" required placeholder="Enter patient name" />
@@ -342,19 +371,32 @@ export default function PatientsPage() {
 
                   <div className="onboarding-grid-two">
                     <label>
+                      <span className="onboarding-field-label">Phone number</span>
+                      <input
+                        name="phone"
+                        type="tel"
+                        placeholder="+233XXXXXXXXX"
+                        inputMode="tel"
+                        pattern="\+233[0-9]{9}"
+                        title="Use the format +233XXXXXXXXX"
+                      />
+                    </label>
+                    <label>
                       <span className="onboarding-field-label">Ghana Card</span>
                       <input name="ghanaCard" placeholder="GHA-XXXXXXX-0000" />
                     </label>
+                  </div>
+
+                  <div className="onboarding-grid-two">
                     <label>
                       <span className="onboarding-field-label">NHIS</span>
                       <input name="nhis" placeholder="XXXX-XXXX-XX" />
                     </label>
+                    <label>
+                      <span className="onboarding-field-label">Facility</span>
+                      <input name="facility" placeholder="Kumasi South Hospital" />
+                    </label>
                   </div>
-
-                  <label>
-                    <span className="onboarding-field-label">Facility</span>
-                    <input name="facility" placeholder="Kumasi South Hospital" />
-                  </label>
 
                   <div className="modal-actions">
                     <button type="button" className="ghost small" onClick={() => setShowRegisterModal(false)}>Cancel</button>

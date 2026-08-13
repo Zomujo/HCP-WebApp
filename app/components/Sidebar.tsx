@@ -62,14 +62,14 @@ const healthWorkerNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Overview', icon: 'overview' },
   { href: '/appointments', label: 'Appointments', icon: 'appointments' },
   { href: '/patients', label: 'Patients', icon: 'patients' },
-  { href: '/chats', label: 'Chats', icon: 'chats' },
+  { href: '#', label: 'Coming Soon', icon: 'chats' },
   { href: '/profile', label: 'Profile', icon: 'profile' },
 ];
 
 const pharmacyNavItems: NavItem[] = [
   { href: '/pharmacy/dashboard', label: 'Dashboard', icon: 'overview' },
   { href: '/pharmacy/patients', label: 'Patients', icon: 'patients' },
-  { href: '/pharmacy/chats', label: 'Chats', icon: 'chats' },
+  { href: '/profile', label: 'Profile', icon: 'profile' },
 ];
 
 export function Sidebar() {
@@ -117,12 +117,21 @@ export function Sidebar() {
       <div id="sidebar-mobile-collapsible" className={`sidebar-collapsible ${isMobileMenuOpen ? 'open' : ''}`}>
         <nav>
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href} className={`nav-link ${pathname === item.href ? 'active' : ''}`}>
-              <span className="nav-icon" aria-hidden>
-                <NavIcon name={item.icon} />
-              </span>
-              {item.label}
-            </Link>
+            item.href === '#' ? (
+              <div key={item.label} className="nav-link disabled-nav-link" aria-disabled="true" style={{ opacity: 0.6, cursor: 'not-allowed' }}>
+                <span className="nav-icon" aria-hidden>
+                  <NavIcon name={item.icon} />
+                </span>
+                {item.label}
+              </div>
+            ) : (
+              <Link key={item.href} href={item.href} className={`nav-link ${pathname === item.href ? 'active' : ''}`}>
+                <span className="nav-icon" aria-hidden>
+                  <NavIcon name={item.icon} />
+                </span>
+                {item.label}
+              </Link>
+            )
           ))}
         </nav>
 
@@ -130,7 +139,9 @@ export function Sidebar() {
           <div className="hcp-user-footer-card">
             <div className="avatar-badge">{(userName || 'U').split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</div>
             <div>
-              <p style={{ margin: 0, fontWeight: 700, fontSize: '0.78rem' }}>{userName} (HCP)</p>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: '0.78rem' }}>
+                {userName} ({user?.role === 'pharmacy-personnel' ? 'Pharmacy' : 'HCP'})
+              </p>
               <p className="text-muted" style={{ margin: 0, fontSize: '0.76rem' }}>{facilityName}</p>
             </div>
           </div>

@@ -5,73 +5,39 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../lib/AuthContext';
+import { authApi } from '../lib/api';
 import { useGoogleScript, signInWithGoogle } from '../lib/googleAuth';
 import { ROLE_CONFIG } from '../lib/config';
-import { ApiError } from '../lib/api';
-
-const PENDING_GOOGLE_LINK_TOKEN_KEY = 'hcp-pending-google-link-token';
-const PENDING_OTP_CONTEXT_KEY = 'hcp-pending-otp-context';
 
 export default function SignupPage() {
   const router = useRouter();
   const { signup, loginWithGoogle, isLoading } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState<'health-worker' | 'pharmacy-personnel'>('health-worker');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'health-worker' | 'pharmacy-personnel'>('health-worker');
+  const pendingOtpKey = 'hcp-pending-otp-context';
 
   useGoogleScript();
 
-  const handleEmailPasswordSignup = async (event: FormEvent<HTMLFormElement>) => {
+  const handleEmailSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
-    const normalizedEmail = email.trim();
-
-    if (!normalizedEmail) {
-      setError('Email is required.');
-      return;
-    }
-
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters.');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
+    setError('');
+    setIsSubmitting(true);
 
     try {
-      setIsSubmitting(true);
-      setError('');
-      const signedUpUser = await signup({ email: normalizedEmail, password, role });
-
-      if (signedUpUser.needsOtpVerification) {
-        sessionStorage.setItem(
-          PENDING_OTP_CONTEXT_KEY,
-          JSON.stringify({
-            flow: 'signup',
-            identifier: normalizedEmail,
-            password,
-            role,
-          })
-        );
-        router.push(`/auth/otp?flow=signup&identifier=${encodeURIComponent(normalizedEmail)}`);
-        return;
-      }
-
-      if (signedUpUser.needsOnboarding) {
-        router.push('/onboarding');
-        return;
-      }
-
-      router.push(ROLE_CONFIG[signedUpUser.role].defaultRoute);
+      const signedUpUser = await signup({ email: email.trim(), password, role });
+      await authApi.resendOtp(email.trim());
+      sessionStorage.setItem(pendingOtpKey, JSON.stringify({
+        flow: 'signup',
+        identifier: email.trim(),
+        password,
+        role,
+      }));
+      router.push(`/auth/otp?flow=signup&identifier=${encodeURIComponent(email.trim())}`);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Signup failed';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Sign up failed');
     } finally {
       setIsSubmitting(false);
     }
@@ -81,7 +47,6 @@ export default function SignupPage() {
     signInWithGoogle(
       async (token: string) => {
         try {
-          setIsSubmitting(true);
           setError('');
           const loggedInUser = await loginWithGoogle(token);
           if (loggedInUser.needsOnboarding) {
@@ -90,17 +55,9 @@ export default function SignupPage() {
           }
           router.push(ROLE_CONFIG[loggedInUser.role].defaultRoute);
         } catch (err) {
-          if (err instanceof ApiError && err.status === 409) {
-            sessionStorage.setItem(PENDING_GOOGLE_LINK_TOKEN_KEY, token);
-            router.push('/login/google-link');
-            return;
-          }
-
           const errorMessage = err instanceof Error ? err.message : 'Google sign up failed';
           console.error('Google sign up error:', err);
           setError(errorMessage);
-        } finally {
-          setIsSubmitting(false);
         }
       },
       (message: string) => {
@@ -129,7 +86,18 @@ export default function SignupPage() {
             <p className="text-muted">Sign up to get started on your health worker journey.</p>
           </div>
 
-          <form className="auth-fields" onSubmit={handleEmailPasswordSignup}>
+          <button 
+            type="button"
+            className="ghost auth-action-button"
+            onClick={handleGoogleSignUp}
+            disabled={isSubmitting || isLoading}
+          >
+            <Image src="/GoogleIcon.png" alt="Google icon" width={18} height={18} />
+            <span>Sign up with Google</span>
+          </button>
+          <p className="auth-divider">or continue with email</p>
+
+          <form className="auth-fields" onSubmit={handleEmailSignUp}>
             <label>
               <span className="block-label">Email</span>
               <input
@@ -142,7 +110,6 @@ export default function SignupPage() {
                 disabled={isSubmitting || isLoading}
               />
             </label>
-
             <label>
               <span className="block-label">Password</span>
               <input
@@ -151,56 +118,22 @@ export default function SignupPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="At least 8 characters"
                 autoComplete="new-password"
+                minLength={8}
                 required
                 disabled={isSubmitting || isLoading}
               />
             </label>
-
             <label>
-              <span className="block-label">Confirm Password</span>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Re-enter password"
-                autoComplete="new-password"
-                required
-                disabled={isSubmitting || isLoading}
-              />
-            </label>
-
-            <label>
-              <span className="block-label">Account Type</span>
-              <select
-                value={role}
-                onChange={(event) => setRole(event.target.value as 'health-worker' | 'pharmacy-personnel')}
-                disabled={isSubmitting || isLoading}
-              >
+              <span className="block-label">Account type</span>
+              <select value={role} onChange={(event) => setRole(event.target.value as typeof role)} disabled={isSubmitting || isLoading}>
                 <option value="health-worker">Health Worker</option>
                 <option value="pharmacy-personnel">Pharmacy Personnel</option>
               </select>
             </label>
-
-            <button
-              type="submit"
-              className="auth-submit"
-              disabled={isSubmitting || isLoading}
-            >
+            <button className="primary auth-submit-button" type="submit" disabled={isSubmitting || isLoading}>
               {isSubmitting ? 'Creating account...' : 'Create account'}
             </button>
           </form>
-
-          <p className="auth-divider">or continue with Google</p>
-
-          <button 
-            type="button"
-            className="ghost auth-action-button"
-            onClick={handleGoogleSignUp}
-            disabled={isSubmitting || isLoading}
-          >
-            <Image src="/GoogleIcon.png" alt="Google icon" width={18} height={18} />
-            <span>Sign up with Google</span>
-          </button>
 
           {error && (
             <div style={{ 
@@ -226,11 +159,6 @@ export default function SignupPage() {
             <p>Manage Health Conditions Easier with the help of Health Professionals and AI</p>
           </div>
         </section>
-      </div>
-
-      <div className="auth-support">
-        <span>supported by</span>
-        <strong>AYA Integrated Healthcare Initiative</strong>
       </div>
     </main>
   );

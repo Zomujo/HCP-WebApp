@@ -12,25 +12,29 @@ interface Facility {
   name: string;
 }
 
-const stepLabels = ['Identity', 'Facility', 'Review'];
-
 export default function OnboardingPage() {
   const router = useRouter();
   const { user, onboard, isLoading } = useAuth();
+  const isPharmacy = user?.role === 'pharmacy-personnel';
+  const stepLabels = isPharmacy ? ['Pharmacy Details', 'Review'] : ['Identity', 'Facility', 'Review'];
+  const totalSteps = stepLabels.length;
   const [activeStep, setActiveStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [facilities, setFacilities] = useState<Facility[]>([]);
   
   // Form state
+  const [pharmacyName, setPharmacyName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [selectedFacilityId, setSelectedFacilityId] = useState('');
 
-  // Load facilities on mount
+  // Facilities are only needed for healthcare-worker onboarding.
   useEffect(() => {
+    if (isPharmacy) return;
+
     const loadFacilities = async () => {
       try {
         const data = await facilityApi.getFacilities();
@@ -42,7 +46,7 @@ export default function OnboardingPage() {
     };
     
     loadFacilities();
-  }, []);
+  }, [isPharmacy]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -52,14 +56,18 @@ export default function OnboardingPage() {
   }, [isLoading, user, router]);
 
   const handleSubmit = async () => {
-    if (activeStep < 2) {
+    if (activeStep < totalSteps - 1) {
       // Validate current step
       if (activeStep === 0) {
-        if (!firstName.trim() || !lastName.trim() || !phone.trim() || !registrationNumber.trim()) {
+        const isValid = isPharmacy
+          ? pharmacyName.trim() && phone.trim()
+          : firstName.trim() && lastName.trim() && phone.trim() && registrationNumber.trim();
+
+        if (!isValid) {
           setError('Please fill in all required fields');
           return;
         }
-      } else if (activeStep === 1) {
+      } else if (!isPharmacy && activeStep === 1) {
         if (!selectedFacilityId) {
           setError('Please select a facility');
           return;
@@ -83,12 +91,13 @@ export default function OnboardingPage() {
         await onboard({
           personnelId: user.personnelId,
           role: user.role,
-          firstname: firstName.trim(),
-          lastname: lastName.trim(),
+          pharmacyName: isPharmacy ? pharmacyName.trim() : undefined,
+          firstname: isPharmacy ? pharmacyName.trim() : firstName.trim(),
+          lastname: isPharmacy ? null : lastName.trim(),
           phoneNumber: normalizePhoneNumber(phone),
-          personnelIdNumber: registrationNumber.trim(),
-          facilityId: selectedFacilityId,
-          facilityName: selectedFacility?.name,
+          personnelIdNumber: isPharmacy ? null : registrationNumber.trim(),
+          facilityId: isPharmacy ? null : selectedFacilityId,
+          facilityName: isPharmacy ? undefined : selectedFacility?.name,
         });
 
         router.push(ROLE_CONFIG[user.role].defaultRoute);
@@ -107,6 +116,36 @@ export default function OnboardingPage() {
 
   const renderStepBody = () => {
     if (activeStep === 0) {
+      if (isPharmacy) {
+        return (
+          <>
+            <p className="onboarding-section-title">Pharmacy Details</p>
+            <p className="onboarding-note">
+              Tell us where you work so we can set up your pharmacy workspace.
+            </p>
+            <label>
+              <span className="onboarding-field-label">Pharmacy Name</span>
+              <input
+                placeholder="e.g. Adasa Pharmacy"
+                value={pharmacyName}
+                onChange={(event) => setPharmacyName(event.target.value)}
+                disabled={isSubmitting}
+              />
+            </label>
+            <label>
+              <span className="onboarding-field-label">Phone Number</span>
+              <input
+                placeholder="+233501234567 or 0551234567"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                disabled={isSubmitting}
+                inputMode="tel"
+              />
+            </label>
+          </>
+        );
+      }
+
       return (
         <>
           <p className="onboarding-section-title">Personal Information</p>
@@ -146,7 +185,7 @@ export default function OnboardingPage() {
           <label>
             <span className="onboarding-field-label">Nurse Registration Number</span>
             <input 
-              placeholder="RN/12345/2024"
+              placeholder="REG/002-57-99-100"
               value={registrationNumber}
               onChange={(e) => setRegistrationNumber(e.target.value)}
               disabled={isSubmitting}
@@ -156,7 +195,7 @@ export default function OnboardingPage() {
       );
     }
 
-    if (activeStep === 1) {
+    if (!isPharmacy && activeStep === 1) {
       return (
         <>
           <p className="onboarding-note">
@@ -189,18 +228,22 @@ export default function OnboardingPage() {
         <div className="onboarding-review">
           <p className="onboarding-section-title">Your Details</p>
 
-          <p className="onboarding-review-label">Full Name</p>
-          <p className="onboarding-review-value">{firstName} {lastName}</p>
+          <p className="onboarding-review-label">{isPharmacy ? 'Pharmacy Name' : 'Full Name'}</p>
+          <p className="onboarding-review-value">{isPharmacy ? pharmacyName : `${firstName} ${lastName}`}</p>
 
           <p className="onboarding-review-label">Contact Details</p>
           <p className="onboarding-review-value">{user?.email}</p>
           <p className="onboarding-review-value">{normalizePhoneNumber(phone) || phone}</p>
 
-          <p className="onboarding-review-label">Registration Number</p>
-          <p className="onboarding-review-value">{registrationNumber}</p>
+          {!isPharmacy && (
+            <>
+              <p className="onboarding-review-label">Registration Number</p>
+              <p className="onboarding-review-value">{registrationNumber}</p>
 
-          <p className="onboarding-review-label">Primary Facility</p>
-          <p className="onboarding-review-value">{selectedFacility?.name || 'Not selected'}</p>
+              <p className="onboarding-review-label">Primary Facility</p>
+              <p className="onboarding-review-value">{selectedFacility?.name || 'Not selected'}</p>
+            </>
+          )}
         </div>
       </>
     );
@@ -210,16 +253,16 @@ export default function OnboardingPage() {
     <main className="onboarding-page">
       <div className="onboarding-stage">
         <div className="onboarding-brand">
-          <Image src="/logo.png" alt="YELIMA logo" width={96} height={96} />
+          <Image src="/logo.png" alt="YELIMA logo" width={22} height={22} />
           <span>YELIMA</span>
         </div>
 
         <section className="onboarding-shell compact">
           <header className="onboarding-header-bar">
-            <p className="onboarding-step-counter">STEP {activeStep + 1} OF 3</p>
-            <h1>{activeStep === 0 ? 'Personal Details' : activeStep === 1 ? 'Facility' : 'Review'}</h1>
+            <p className="onboarding-step-counter">STEP {activeStep + 1} OF {totalSteps}</p>
+            <h1>{isPharmacy ? (activeStep === 0 ? 'Pharmacy Details' : 'Review') : activeStep === 0 ? 'Personal Details' : activeStep === 1 ? 'Facility' : 'Review'}</h1>
             <div className="onboarding-progress-line">
-              <span style={{ width: `${((activeStep + 1) / 3) * 100}%` }} />
+              <span style={{ width: `${((activeStep + 1) / totalSteps) * 100}%` }} />
             </div>
 
             <div className="onboarding-steps-row">
@@ -251,7 +294,7 @@ export default function OnboardingPage() {
           </div>
         </section>
 
-        {activeStep === 2 && (
+        {activeStep === totalSteps - 1 && (
           <div className="onboarding-disclaimer-box">
             <span className="onboarding-disclaimer-icon">i</span>
             <p className="onboarding-disclaimer">
@@ -278,7 +321,7 @@ export default function OnboardingPage() {
             onClick={handleSubmit}
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Loading...' : activeStep < 2 ? 'Save & Continue' : 'Submit'}
+            {isSubmitting ? 'Loading...' : activeStep < totalSteps - 1 ? 'Save & Continue' : 'Submit'}
           </button>
         </div>
       </div>

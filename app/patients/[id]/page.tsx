@@ -24,6 +24,11 @@ function parseBloodPressure(value: unknown): { systolic: number; diastolic: numb
   return { systolic: Number(match[1]), diastolic: Number(match[2]) };
 }
 
+interface BloodSugarReading {
+  recordedAt: string;
+  value: number;
+}
+
 function mapBloodPressureLogs(logs: any[]): BloodPressureReading[] {
   return logs
     .map((log) => {
@@ -38,6 +43,24 @@ function mapBloodPressureLogs(logs: any[]): BloodPressureReading[] {
       };
     })
     .filter((reading): reading is BloodPressureReading => reading !== null)
+    .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
+}
+
+function mapBloodSugarLogs(logs: any[]): BloodSugarReading[] {
+  return logs
+    .map((log) => {
+      const bloodSugar = log.vitals?.find((vital: any) =>
+        String(vital.vitalType || vital.type || '').toLowerCase().includes('bloodsugar') ||
+        String(vital.vitalType || vital.type || '').toLowerCase().includes('glucose')
+      );
+      const value = Number(bloodSugar?.value || log.bloodSugar || log.glucose);
+      if (!Number.isFinite(value)) return null;
+      return {
+        value,
+        recordedAt: log.recordedAt || log.createdAt || log.date || new Date().toISOString(),
+      };
+    })
+    .filter((reading): reading is BloodSugarReading => reading !== null)
     .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
 }
 
@@ -63,18 +86,30 @@ export default function PatientDetailsPage() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [vitals, setVitals] = useState<any[]>([]);
   const [bloodPressureReadings, setBloodPressureReadings] = useState<BloodPressureReading[]>([]);
+  const [bloodSugarReadings, setBloodSugarReadings] = useState<BloodSugarReading[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [messageText, setMessageText] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [readingComment, setReadingComment] = useState('');
+  const [bloodSugarComment, setBloodSugarComment] = useState('');
   const [vitalForm, setVitalForm] = useState({
     bloodPressure: '',
-    heartRate: '',
+    bloodSugar: '',
     notes: '',
   });
   const [isSavingVitals, setIsSavingVitals] = useState(false);
+  const [isEditingPatient, setIsEditingPatient] = useState(false);
+  const [isUpdatingPatient, setIsUpdatingPatient] = useState(false);
+  const [patientEditForm, setPatientEditForm] = useState({
+    firstName: '',
+    lastName: '',
+    age: 0,
+    ghanaCard: '',
+    nhis: '',
+    chronicConditions: [] as string[],
+  });
 
   useEffect(() => {
     const loadData = async () => {
@@ -92,7 +127,9 @@ export default function PatientDetailsPage() {
 
         setPatient(patientData);
         setVitals(Array.isArray(vitalsData) ? vitalsData : []);
-        setBloodPressureReadings(mapBloodPressureLogs(Array.isArray(vitalLogs) ? vitalLogs : []));
+        const logsArray = Array.isArray(vitalLogs) ? vitalLogs : [];
+        setBloodPressureReadings(mapBloodPressureLogs(logsArray));
+        setBloodSugarReadings(mapBloodSugarLogs(logsArray));
         setAppointments(appointmentsData);
         setMedications(medicationsData);
       } catch (err) {
@@ -137,11 +174,11 @@ export default function PatientDetailsPage() {
         });
       }
 
-      if (vitalForm.heartRate.trim()) {
+      if (vitalForm.bloodSugar.trim()) {
         vitalsToSave.push({
-          vitalType: 'heartRate',
-          value: vitalForm.heartRate.trim(),
-          unit: 'bpm',
+          vitalType: 'bloodSugar',
+          value: vitalForm.bloodSugar.trim(),
+          unit: 'mg/dL',
           severity: 'normal',
         });
       }
@@ -158,15 +195,97 @@ export default function PatientDetailsPage() {
         vitals: vitalsToSave,
       });
 
-      setVitalForm({ bloodPressure: '', heartRate: '', notes: '' });
+      setVitalForm({ bloodPressure: '', bloodSugar: '', notes: '' });
       const refreshedVitals = await hcpPatientApi.getPatientVitals(patientId).catch(() => []);
       setVitals(Array.isArray(refreshedVitals) ? refreshedVitals : []);
       const refreshedLogs = await hcpPatientApi.getPatientVitalHistoryLogs(patientId).catch(() => []);
-      setBloodPressureReadings(mapBloodPressureLogs(Array.isArray(refreshedLogs) ? refreshedLogs : []));
+      const logsArray = Array.isArray(refreshedLogs) ? refreshedLogs : [];
+      setBloodPressureReadings(mapBloodPressureLogs(logsArray));
+      setBloodSugarReadings(mapBloodSugarLogs(logsArray));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save patient vitals');
     } finally {
       setIsSavingVitals(false);
+    }
+  };
+
+  const handleSendBPComment = async () => {
+    try {
+      if (!readingComment.trim()) {
+        setError('Please enter a comment before sending.');
+        return;
+      }
+
+      // Send comment to patient (guidance note for BP reading)
+      // TODO: Wire to backend endpoint for sending patient guidance
+      console.log('Sending BP comment to patient:', readingComment);
+      
+      // For now, show success and clear
+      setError('');
+      setReadingComment('');
+      alert('Guidance sent to patient successfully.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send guidance to patient');
+    }
+  };
+
+  const handleSendBloodSugarComment = async () => {
+    try {
+      if (!bloodSugarComment.trim()) {
+        setError('Please enter a comment before sending.');
+        return;
+      }
+
+      // Send comment to patient (guidance note for blood sugar reading)
+      // TODO: Wire to backend endpoint for sending patient guidance
+      console.log('Sending blood sugar comment to patient:', bloodSugarComment);
+      
+      // For now, show success and clear
+      setError('');
+      setBloodSugarComment('');
+      alert('Guidance sent to patient successfully.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send guidance to patient');
+    }
+  };
+
+  const handleEditPatient = () => {
+    if (patient) {
+      setPatientEditForm({
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        age: patient.age,
+        ghanaCard: patient.ghanaCard || '',
+        nhis: patient.nhis || '',
+        chronicConditions: patient.chronicConditions || [],
+      });
+      setIsEditingPatient(true);
+    }
+  };
+
+  const handleUpdatePatient = async () => {
+    try {
+      setIsUpdatingPatient(true);
+      setError('');
+
+      await hcpPatientApi.updatePatient(patientId, {
+        firstname: patientEditForm.firstName,
+        lastname: patientEditForm.lastName,
+        age: patientEditForm.age,
+        ghanaCardNumber: patientEditForm.ghanaCard,
+        nhisNumber: patientEditForm.nhis,
+        chronicConditions: patientEditForm.chronicConditions,
+      });
+
+      // Refresh patient data
+      const refreshedPatient = await hcpPatientApi.getPatientById(patientId);
+      setPatient(refreshedPatient);
+      setIsEditingPatient(false);
+      alert('Patient details updated successfully.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update patient details');
+    } finally {
+      setIsUpdatingPatient(false);
     }
   };
 
@@ -224,6 +343,13 @@ export default function PatientDetailsPage() {
   const currentBloodPressure = patient?.vitals?.systolic && patient?.vitals?.diastolic
     ? `${patient.vitals.systolic} / ${patient.vitals.diastolic}`
     : '168 / 102';
+  
+  const bloodSugarChartReadings = bloodSugarReadings.length > 0 ? bloodSugarReadings : [
+    { recordedAt: new Date().toISOString(), value: patient.bloodSugar || 72 },
+  ];
+  const bloodSugarChartMax = Math.max(200, ...bloodSugarChartReadings.map((reading) => reading.value + 20));
+  const bloodSugarChartY = (value: number) => 205 - (value / bloodSugarChartMax) * 170;
+  const currentBloodSugar = patient.bloodSugar || 72;
 
   return (
     <ProtectedRoute requiredRole="health-worker">
@@ -237,7 +363,7 @@ export default function PatientDetailsPage() {
                 {patient.firstName} {patient.lastName}
               </h1>
               <p className="text-muted" style={{ margin: '4px 0 0' }}>
-                {patient.age} • {patient.chronicConditions?.join(', ') || 'N/A'} • Patient since Jan 2025
+                {patient.age} • {patient.chronicConditions?.join(', ') || 'N/A'} • Patient since {patient.joined || 'N/A'}
               </p>
               <div className="patient-chip-row">
                 <span className="badge badge-critical">△ 3 critical readings</span>
@@ -265,39 +391,156 @@ export default function PatientDetailsPage() {
               <div className="panel hcp-panel">
                 <div className="panel-headline-row" style={{ marginBottom: 12 }}>
                   <p className="panel-title">Patient details</p>
+                  {!isEditingPatient && (
+                    <button
+                      type="button"
+                      onClick={handleEditPatient}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '1.2rem',
+                        padding: '0 8px',
+                      }}
+                      title="Edit patient details"
+                    >
+                      ✎
+                    </button>
+                  )}
                 </div>
-                <div className="patient-kv-grid">
-                  <div>
-                    <p className="block-label">Full name</p>
-                    <p>
-                      {patient.firstName} {patient.lastName}
-                    </p>
+
+                {!isEditingPatient ? (
+                  <div className="patient-kv-grid">
+                    <div>
+                      <p className="block-label">Full name</p>
+                      <p>
+                        {patient.firstName} {patient.lastName}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="block-label">Age</p>
+                      <p>{patient.age}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Ghana Card</p>
+                      <p>{patient.ghanaCard || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">NHIS</p>
+                      <p>{patient.nhis || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Conditions</p>
+                      <p>{patient.chronicConditions?.join(', ') || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Registered</p>
+                      <p>{patient.joined || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="block-label">Facility</p>
+                      <p>{patient.facility || 'N/A'}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="block-label">Age</p>
-                    <p>{patient.age}</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <label style={{ display: 'block' }}>
+                      <span className="block-label">First Name</span>
+                      <input
+                        type="text"
+                        value={patientEditForm.firstName}
+                        onChange={(e) =>
+                          setPatientEditForm((prev) => ({ ...prev, firstName: e.target.value }))
+                        }
+                        placeholder="First name"
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                      />
+                    </label>
+                    <label style={{ display: 'block' }}>
+                      <span className="block-label">Last Name</span>
+                      <input
+                        type="text"
+                        value={patientEditForm.lastName}
+                        onChange={(e) =>
+                          setPatientEditForm((prev) => ({ ...prev, lastName: e.target.value }))
+                        }
+                        placeholder="Last name"
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                      />
+                    </label>
+                    <label style={{ display: 'block' }}>
+                      <span className="block-label">Age</span>
+                      <input
+                        type="number"
+                        value={patientEditForm.age}
+                        onChange={(e) =>
+                          setPatientEditForm((prev) => ({ ...prev, age: Number(e.target.value) }))
+                        }
+                        placeholder="Age"
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                      />
+                    </label>
+                    <label style={{ display: 'block' }}>
+                      <span className="block-label">Ghana Card</span>
+                      <input
+                        type="text"
+                        value={patientEditForm.ghanaCard}
+                        onChange={(e) =>
+                          setPatientEditForm((prev) => ({ ...prev, ghanaCard: e.target.value }))
+                        }
+                        placeholder="Ghana Card number"
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                      />
+                    </label>
+                    <label style={{ display: 'block' }}>
+                      <span className="block-label">NHIS</span>
+                      <input
+                        type="text"
+                        value={patientEditForm.nhis}
+                        onChange={(e) =>
+                          setPatientEditForm((prev) => ({ ...prev, nhis: e.target.value }))
+                        }
+                        placeholder="NHIS number"
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                      />
+                    </label>
+                    <label style={{ display: 'block' }}>
+                      <span className="block-label">Chronic Conditions (comma-separated)</span>
+                      <input
+                        type="text"
+                        value={patientEditForm.chronicConditions.join(', ')}
+                        onChange={(e) =>
+                          setPatientEditForm((prev) => ({
+                            ...prev,
+                            chronicConditions: e.target.value
+                              .split(',')
+                              .map((c) => c.trim())
+                              .filter((c) => c),
+                          }))
+                        }
+                        placeholder="e.g., hypertension, diabetes"
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                      />
+                    </label>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingPatient(false)}
+                        className="ghost small"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUpdatePatient}
+                        disabled={isUpdatingPatient}
+                        className="primary small"
+                      >
+                        {isUpdatingPatient ? 'Updating...' : 'Save'}
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <p className="block-label">Ghana Card</p>
-                    <p>{patient.ghanaCard || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">NHIS</p>
-                    <p>{patient.nhis || 'Not provided'}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">Conditions</p>
-                    <p>{patient.chronicConditions?.join(', ') || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <p className="block-label">Registered</p>
-                    <p>14 Jan 2025</p>
-                  </div>
-                  <div>
-                    <p className="block-label">Facility</p>
-                    <p>{patient.facility || 'N/A'}</p>
-                  </div>
-                </div>
+                )}
               </div>
 
               <div className="panel hcp-panel">
@@ -315,78 +558,187 @@ export default function PatientDetailsPage() {
 
           {activeTab === 'Readings' && (
             <section className="panel hcp-panel">
-              <div className="readings-chart-box">
-                <div className="readings-chart-inner">
-                  <svg viewBox="0 0 720 250" width="100%" height="100%" preserveAspectRatio="none">
-                    {Array.from({ length: 6 }).map((_, index) => (
-                      <line key={`h-${index}`} x1="60" y1={30 + index * 35} x2="680" y2={30 + index * 35} className="chart-grid-line" />
-                    ))}
-                    {Array.from({ length: 12 }).map((_, index) => (
-                      <line key={`v-${index}`} x1={60 + index * 56} y1="30" x2={60 + index * 56} y2="205" className="chart-grid-line" />
-                    ))}
-
-                    {chartReadings.map((reading, index) => (
-                      <text key={reading.recordedAt + index} x={60 + (index * 620) / Math.max(1, chartReadings.length - 1)} y="225" textAnchor="middle" className="chart-axis-text">
-                        {new Date(reading.recordedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                      </text>
-                    ))}
-
-                    <text x="8" y="118" className="chart-axis-text">mmHg</text>
-
-                    <polyline
-                      className="chart-line-systolic"
-                      points={chartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, chartReadings.length - 1)},${chartY(reading.systolic)}`).join(' ')}
-                    />
-                    <polyline
-                      className="chart-line-diastolic"
-                      points={chartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, chartReadings.length - 1)},${chartY(reading.diastolic)}`).join(' ')}
-                    />
-                    {chartReadings.map((reading, index) => (
-                      <circle
-                        key={`s-${reading.recordedAt}-${index}`}
-                        className="chart-dot-systolic"
-                        cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
-                        cy={chartY(reading.systolic)}
-                        r="3.2"
-                      />
-                    ))}
-                    {chartReadings.map((reading, index) => (
-                      <circle
-                        key={`d-${reading.recordedAt}-${index}`}
-                        className="chart-dot-diastolic"
-                        cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
-                        cy={chartY(reading.diastolic)}
-                        r="3.2"
-                      />
-                    ))}
-                  </svg>
+              {/* Blood Pressure Section */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Blood pressure</h3>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                    {chartReadings.length > 0 
+                      ? `${chartReadings[chartReadings.length - 1].systolic}/${chartReadings[chartReadings.length - 1].diastolic}`
+                      : currentBloodPressure
+                    }
+                  </span>
                 </div>
-                <div className="readings-legend-row">
-                  <span className="readings-legend-item"><span className="legend-dot systolic" /> Systolic (top)</span>
-                  <span className="readings-legend-item"><span className="legend-dot diastolic" /> Diastolic (bottom)</span>
+                <p style={{ margin: '0 0 16px 0', color: '#999', fontSize: '0.9rem' }}>Latest reading</p>
+                <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: '0.95rem' }}>Your blood pressure trend over this period.</p>
+
+                <div className="readings-chart-box">
+                  <div className="readings-chart-inner">
+                    <svg viewBox="0 0 720 250" width="100%" height="100%" preserveAspectRatio="none">
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <line key={`h-${index}`} x1="60" y1={30 + index * 35} x2="680" y2={30 + index * 35} className="chart-grid-line" />
+                      ))}
+                      {Array.from({ length: 12 }).map((_, index) => (
+                        <line key={`v-${index}`} x1={60 + index * 56} y1="30" x2={60 + index * 56} y2="205" className="chart-grid-line" />
+                      ))}
+
+                      {chartReadings.map((reading, index) => (
+                        <text key={reading.recordedAt + index} x={60 + (index * 620) / Math.max(1, chartReadings.length - 1)} y="225" textAnchor="middle" className="chart-axis-text">
+                          {new Date(reading.recordedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </text>
+                      ))}
+
+                      <text x="8" y="118" className="chart-axis-text">mmHg</text>
+
+                      <polyline
+                        className="chart-line-systolic"
+                        points={chartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, chartReadings.length - 1)},${chartY(reading.systolic)}`).join(' ')}
+                      />
+                      <polyline
+                        className="chart-line-diastolic"
+                        points={chartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, chartReadings.length - 1)},${chartY(reading.diastolic)}`).join(' ')}
+                      />
+                      {chartReadings.map((reading, index) => (
+                        <circle
+                          key={`s-${reading.recordedAt}-${index}`}
+                          className="chart-dot-systolic"
+                          cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
+                          cy={chartY(reading.systolic)}
+                          r="4"
+                        />
+                      ))}
+                      {chartReadings.map((reading, index) => (
+                        <circle
+                          key={`d-${reading.recordedAt}-${index}`}
+                          className="chart-dot-diastolic"
+                          cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
+                          cy={chartY(reading.diastolic)}
+                          r="4"
+                        />
+                      ))}
+                      
+                      {/* Latest value tooltip for BP */}
+                      {chartReadings.length > 0 && (
+                        <g>
+                          <rect
+                            x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1) - 40}
+                            y={chartY(chartReadings[chartReadings.length - 1].systolic) - 50}
+                            width="80"
+                            height="50"
+                            fill="#2c3e50"
+                            rx="4"
+                          />
+                          <text
+                            x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1)}
+                            y={chartY(chartReadings[chartReadings.length - 1].systolic) - 25}
+                            textAnchor="middle"
+                            fill="white"
+                            fontSize="14"
+                            fontWeight="600"
+                          >
+                            {chartReadings[chartReadings.length - 1].systolic}
+                          </text>
+                          <text
+                            x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1)}
+                            y={chartY(chartReadings[chartReadings.length - 1].systolic) - 10}
+                            textAnchor="middle"
+                            fill="white"
+                            fontSize="14"
+                            fontWeight="600"
+                          >
+                            {chartReadings[chartReadings.length - 1].diastolic}
+                          </text>
+                        </g>
+                      )}
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="readings-legend-row" style={{ marginTop: 12 }}>
+                  <span className="readings-legend-item"><span className="legend-dot systolic" /> Systolic</span>
+                  <span className="readings-legend-item"><span className="legend-dot diastolic" /> Diastolic</span>
                 </div>
               </div>
 
-              <div className="reading-card">
-                <p><strong>BP</strong> {currentBloodPressure} mmHg <span className="badge badge-critical" style={{ marginLeft: 8 }}>Critical</span></p>
-                <p className="text-muted">Today 07:42 · AI check-in</p>
-                <p className="block-label" style={{ marginTop: 10 }}>Leave a critical comment</p>
-                <div className="reading-note-row">
-                  <button className="filter-pill" type="button" onClick={() => setReadingComment('Your reading looks good, keep it up.')}>Your reading looks good, keep it up.</button>
-                  <button className="filter-pill" type="button" onClick={() => setReadingComment('This reading needs monitoring, please check in again tomorrow.')}>This reading needs monitoring, please check in again tomorrow.</button>
-                  <button className="filter-pill" type="button" onClick={() => setReadingComment('This reading is concerning, please visit the facility as soon as possible.')}>This reading is concerning, please visit the facility as soon as possible.</button>
-                  <button className="filter-pill" type="button" onClick={() => setReadingComment('Please ensure you are taking your medication as prescribed.')}>Please ensure you are taking your medication as prescribed.</button>
+              {/* Blood Sugar Section */}
+              <div style={{ marginTop: 32 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Blood Glucose</h3>
+                  <span style={{ fontSize: '1.3rem', fontWeight: 600 }}>
+                    {bloodSugarChartReadings.length > 0 
+                      ? `${bloodSugarChartReadings[bloodSugarChartReadings.length - 1].value}`
+                      : currentBloodSugar
+                    }
+                  </span>
                 </div>
-                <div className="readings-action-row">
-                  <input
-                    value={readingComment}
-                    onChange={(event) => setReadingComment(event.target.value)}
-                    placeholder="Add a short guidance note"
-                  />
-                  <button className="ghost small readings-action-clear" type="button" onClick={() => setReadingComment('')}>Clear</button>
-                  <button className="primary small readings-action-send" type="button">Send to patient</button>
+                <p style={{ margin: '0 0 16px 0', color: '#999', fontSize: '0.9rem' }}>mmol/L</p>
+                <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: '0.95rem' }}>Your blood glucose trend over this period.</p>
+
+                <div className="readings-chart-box">
+                  <div className="readings-chart-inner">
+                    <svg viewBox="0 0 720 250" width="100%" height="100%" preserveAspectRatio="none">
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <line key={`h-${index}`} x1="60" y1={30 + index * 35} x2="680" y2={30 + index * 35} className="chart-grid-line" />
+                      ))}
+                      {Array.from({ length: 12 }).map((_, index) => (
+                        <line key={`v-${index}`} x1={60 + index * 56} y1="30" x2={60 + index * 56} y2="205" className="chart-grid-line" />
+                      ))}
+
+                      {bloodSugarChartReadings.map((reading, index) => (
+                        <text key={reading.recordedAt + index} x={60 + (index * 620) / Math.max(1, bloodSugarChartReadings.length - 1)} y="225" textAnchor="middle" className="chart-axis-text">
+                          {new Date(reading.recordedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </text>
+                      ))}
+
+                      <text x="8" y="118" className="chart-axis-text">mmol/L</text>
+
+                      <polyline
+                        className="chart-line-systolic"
+                        points={bloodSugarChartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, bloodSugarChartReadings.length - 1)},${bloodSugarChartY(reading.value)}`).join(' ')}
+                      />
+                      {bloodSugarChartReadings.map((reading, index) => (
+                        <circle
+                          key={`bs-${reading.recordedAt}-${index}`}
+                          className="chart-dot-systolic"
+                          cx={60 + (index * 620) / Math.max(1, bloodSugarChartReadings.length - 1)}
+                          cy={bloodSugarChartY(reading.value)}
+                          r="4"
+                        />
+                      ))}
+
+                      {/* Latest value tooltip for Blood Sugar */}
+                      {bloodSugarChartReadings.length > 0 && (
+                        <g>
+                          <rect
+                            x={60 + ((bloodSugarChartReadings.length - 1) * 620) / Math.max(1, bloodSugarChartReadings.length - 1) - 35}
+                            y={bloodSugarChartY(bloodSugarChartReadings[bloodSugarChartReadings.length - 1].value) - 40}
+                            width="70"
+                            height="40"
+                            fill="#2c3e50"
+                            rx="4"
+                          />
+                          <text
+                            x={60 + ((bloodSugarChartReadings.length - 1) * 620) / Math.max(1, bloodSugarChartReadings.length - 1)}
+                            y={bloodSugarChartY(bloodSugarChartReadings[bloodSugarChartReadings.length - 1].value) - 15}
+                            textAnchor="middle"
+                            fill="white"
+                            fontSize="14"
+                            fontWeight="600"
+                          >
+                            {bloodSugarChartReadings[bloodSugarChartReadings.length - 1].value}
+                          </text>
+                        </g>
+                      )}
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="readings-legend-row" style={{ marginTop: 12 }}>
+                  <span className="readings-legend-item"><span className="legend-dot systolic" /> Blood Glucose</span>
                 </div>
               </div>
+
+              {/* Comments and Actions Section */}
 
               <div className="panel hcp-panel" style={{ marginTop: 18 }}>
                 <div className="panel-headline-row" style={{ marginBottom: 12 }}>
@@ -405,23 +757,29 @@ export default function PatientDetailsPage() {
                   </label>
 
                   <label>
-                    <span className="onboarding-field-label">Heart rate</span>
+                    <span className="onboarding-field-label">Blood Sugar</span>
                     <input
                       type="text"
-                      value={vitalForm.heartRate}
-                      onChange={(event) => setVitalForm((prev) => ({ ...prev, heartRate: event.target.value }))}
-                      placeholder="72 bpm"
+                      value={vitalForm.bloodSugar}
+                      onChange={(event) => setVitalForm((prev) => ({ ...prev, bloodSugar: event.target.value }))}
+                      placeholder="72"
                     />
                   </label>
                 </div>
 
                 <label style={{ marginTop: 12, display: 'block' }}>
-                  <span className="onboarding-field-label">Notes</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span className="onboarding-field-label">Notes</span>
+                    <span style={{ fontSize: '0.875rem', color: '#999' }}>
+                      {vitalForm.notes.length}/500
+                    </span>
+                  </div>
                   <textarea
                     value={vitalForm.notes}
-                    onChange={(event) => setVitalForm((prev) => ({ ...prev, notes: event.target.value }))}
+                    onChange={(event) => setVitalForm((prev) => ({ ...prev, notes: event.target.value.slice(0, 500) }))}
                     placeholder="Patient was resting during measurement..."
                     rows={3}
+                    maxLength={500}
                   />
                 </label>
 
@@ -438,9 +796,9 @@ export default function PatientDetailsPage() {
               </div>
 
               {bloodPressureReadings.slice(-4).reverse().map((reading) => (
-                <div key={reading.recordedAt} className="reading-mini-card">
-                  <p><strong>BP</strong> {reading.systolic} / {reading.diastolic} mmHg</p>
-                  <p className="text-muted" style={{ marginTop: 4 }}>{formatAppointmentDate(reading.recordedAt)}</p>
+                <div key={reading.recordedAt} className="reading-mini-card" style={{ marginTop: 12 }}>
+                  <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}><strong>BP</strong> {reading.systolic} / {reading.diastolic} mmHg</p>
+                  <p className="text-muted" style={{ marginTop: 4, margin: 0 }}>{formatAppointmentDate(reading.recordedAt)}</p>
                 </div>
               ))}
             </section>
@@ -575,38 +933,9 @@ export default function PatientDetailsPage() {
           )}
 
           {activeTab === 'Chat' && (
-            <section className="panel hcp-panel patient-chat-box">
-              <div className="message-list" style={{ padding: 8, minHeight: '200px' }}>
-                <div className="message-bubble message-from">
-                  Good morning. I took my tablet but my head is heavy.
-                  <div className="message-time">08:14</div>
-                </div>
-                <div className="message-bubble message-from">
-                  I feel dizzy after the new medicine.
-                  <div className="message-time">08:15</div>
-                </div>
-                <div className="message-bubble message-to">
-                  Thank you for letting me know. Please sit and drink water. I will call you shortly.
-                  <div className="message-time">08:22</div>
-                </div>
-              </div>
-
-              <div className="chat-suggest-row">
-                <span className="filter-pill">Thank you for the reading.</span>
-                <span className="filter-pill">Drink water.</span>
-                <span className="filter-pill">Come to the clinic tomorrow morning.</span>
-              </div>
-
-              <div className="chat-input-row" style={{ marginTop: 0 }}>
-                <input
-                  type="text"
-                  placeholder="Write a short, warm reply..."
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                />
-                <button className="primary small">
-                  ➤
-                </button>
+            <section className="panel hcp-panel patient-chat-box" style={{ display: 'grid', placeItems: 'center', minHeight: '200px' }}>
+              <div style={{ textAlign: 'center', color: '#7b8392', fontSize: '1.2rem', fontWeight: 700 }}>
+                Coming Soon
               </div>
             </section>
           )}

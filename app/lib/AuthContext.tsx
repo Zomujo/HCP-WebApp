@@ -16,7 +16,6 @@ interface User {
     name: string;
   };
   needsOnboarding?: boolean;
-  needsOtpVerification?: boolean;
 }
 
 interface AuthContextType {
@@ -30,11 +29,12 @@ interface AuthContextType {
   onboard: (data: {
     personnelId: string;
     role: 'health-worker' | 'pharmacy-personnel';
+    pharmacyName?: string;
     firstname: string;
-    lastname: string;
+    lastname: string | null;
     phoneNumber: string;
-    personnelIdNumber: string;
-    facilityId: string;
+    personnelIdNumber: string | null;
+    facilityId?: string | null;
     facilityName?: string;
   }) => Promise<User>;
   logout: () => void;
@@ -148,18 +148,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const current = await authApi.getCurrent();
           const names = splitUserName(current?.userName);
+          const resolvedRole = parsedUser?.role || 'health-worker';
+          const pharmacyProfileComplete = resolvedRole === 'pharmacy-personnel' && Boolean(
+            current?.userName || current?.firstname || current?.firstName || current?.pharmacyName || current?.phoneNumber
+          );
           const hydratedUser: User = {
             id: current?.id || parsedUser?.id || '',
             personnelId: current?.personnelId || parsedUser?.personnelId || '',
             email: current?.email || parsedUser?.email || '',
             firstName: names.firstName || parsedUser?.firstName || '',
             lastName: names.lastName || parsedUser?.lastName || '',
-            role: parsedUser?.role || 'health-worker',
+            role: resolvedRole,
             facilityId: current?.facility?.id || parsedUser?.facilityId,
             facility: current?.facility
               ? { id: current.facility.id, name: current.facility.name }
               : parsedUser?.facility,
-            needsOnboarding: !current?.facility,
+            needsOnboarding: !current?.facility && !pharmacyProfileComplete,
           };
 
           setUser(hydratedUser);
@@ -229,11 +233,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const onboard = async (data: {
     personnelId: string;
     role: 'health-worker' | 'pharmacy-personnel';
+    pharmacyName?: string;
     firstname: string;
-    lastname: string;
+    lastname: string | null;
     phoneNumber: string;
-    personnelIdNumber: string;
-    facilityId: string;
+    personnelIdNumber: string | null;
+    facilityId?: string | null;
     facilityName?: string;
   }) => {
     try {
@@ -259,9 +264,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           personnelId: data.personnelId,
           role: data.role,
           firstName: data.firstname,
-          lastName: data.lastname,
-          facilityId: data.facilityId,
-          facility: data.facilityName
+          lastName: data.lastname || undefined,
+          facilityId: data.facilityId || undefined,
+          facility: data.facilityName && data.facilityId
             ? { id: data.facilityId, name: data.facilityName }
             : loggedIn.user.facility,
           needsOnboarding: false,

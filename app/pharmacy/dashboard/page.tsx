@@ -24,6 +24,19 @@ export default function PharmacyDashboardPage() {
   const [stats, setStats] = useState<DashboardStat[]>([]);
   const [recentVitals, setRecentVitals] = useState<RecentVital[]>([]);
   const [referralCode, setReferralCode] = useState('');
+  const [isReferralCopied, setIsReferralCopied] = useState(false);
+
+  const handleCopyReferralCode = async () => {
+    if (!referralCode) return;
+
+    try {
+      await navigator.clipboard.writeText(referralCode);
+      setIsReferralCopied(true);
+      window.setTimeout(() => setIsReferralCopied(false), 1800);
+    } catch {
+      setError('Unable to copy referral code');
+    }
+  };
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -63,7 +76,7 @@ export default function PharmacyDashboardPage() {
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Pharmacy Dashboard</h1>
-              <p className="subtitle">Overview of pharmacy patients and team communication.</p>
+              <p className="subtitle">Monitor registered patients, vital activity, and referrals.</p>
             </div>
           </div>
 
@@ -108,9 +121,9 @@ export default function PharmacyDashboardPage() {
                       {referralCode || 'Not available'}
                     </p>
                   </div>
-                  <Link href="/pharmacy/patients" className="ghost small">
-                    Open Patients
-                  </Link>
+                  <button type="button" className="ghost small" onClick={handleCopyReferralCode} disabled={!referralCode}>
+                    {isReferralCopied ? 'Copied' : 'Copy code'}
+                  </button>
                 </div>
               </section>
 
@@ -123,7 +136,7 @@ export default function PharmacyDashboardPage() {
                   <Link href="/pharmacy/patients" className="text-link">See All Patients</Link>
                 </div>
 
-                <table className="table hcp-table">
+                <table className="table hcp-table pharmacy-vitals-table">
                   <thead>
                     <tr>
                       <th>Patient</th>
@@ -151,19 +164,6 @@ export default function PharmacyDashboardPage() {
                 </table>
               </section>
 
-              <section className="panel hcp-panel" style={{ marginTop: 18 }}>
-                <div className="panel-headline-row" style={{ marginBottom: 10 }}>
-                  <p className="panel-title">Quick Access</p>
-                </div>
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <Link href="/pharmacy/patients" className="ghost">
-                    Open Patients
-                  </Link>
-                  <Link href="/pharmacy/chats" className="ghost">
-                    Open Chats
-                  </Link>
-                </div>
-              </section>
             </>
           )}
         </main>

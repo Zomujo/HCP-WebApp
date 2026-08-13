@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
-import { useAuth } from '../lib/AuthContext';
 import { hcpPatientApi } from '../lib/api';
 
 interface DashboardStats {
@@ -57,8 +55,6 @@ function buildWeeklyCheckInData(lastCheckInDates: string[]): Appointment[] {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats[]>([]);
@@ -71,8 +67,8 @@ export default function DashboardPage() {
         setIsLoading(true);
         setError('');
 
-        // Fetch patients for the current facility when available
-        const patients = await hcpPatientApi.getPatients(1, 50, user?.facilityId || user?.facility?.id);
+        // Fetch patients
+        const patients = await hcpPatientApi.getPatients(1, 50);
         
         // Ensure patients is an array
         if (!Array.isArray(patients)) {
@@ -126,7 +122,7 @@ export default function DashboardPage() {
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Dashboard</h1>
-              <p className="subtitle">A snapshot of your clinic workload.</p>
+              <p className="subtitle">A snapshot of your clinic workload and patient safety signals.</p>
             </div>
           </div>
 
@@ -161,10 +157,10 @@ export default function DashboardPage() {
               <section className="panel hcp-panel" style={{ marginTop: 18 }}>
                 <div className="panel-headline-row">
                   <div>
-                    <p className="panel-title">Clinic Visits This Week</p>
-                    <p className="text-muted">{weeklyAppointments.reduce((sum, a) => sum + a.value, 0)} Total Appointments • Next: Today 1:30 PM</p>
+                    <p className="panel-title">Patient Check-ins This Week</p>
+                    <p className="text-muted">{weeklyAppointments.reduce((sum, a) => sum + a.value, 0)} Total Check-ins</p>
                   </div>
-                  <Link href="/appointments" className="text-link">See All Appointments</Link>
+                  <Link href="/patients" className="text-link">See All Patients</Link>
                 </div>
 
                 <div className="week-grid-figma">
@@ -181,7 +177,7 @@ export default function DashboardPage() {
               <section className="panel hcp-panel" style={{ marginTop: 18 }}>
                 <div className="panel-headline-row" style={{ marginBottom: 10 }}>
                   <p className="panel-title">Recent Critical Readings</p>
-                  <Link href="/appointments" className="text-link">See All Appointments</Link>
+                  <Link href="/patients" className="text-link">See All Patients</Link>
                 </div>
 
                 <table className="table hcp-table">
@@ -199,11 +195,7 @@ export default function DashboardPage() {
                   <tbody>
                     {recentReadings.length > 0 ? (
                       recentReadings.map((patient) => (
-                        <tr
-                          key={patient.id}
-                          onClick={() => router.push(`/patients/${patient.id}`)}
-                          style={{ cursor: 'pointer' }}
-                        >
+                        <tr key={patient.id}>
                           <td>
                             <div className="table-name-cell">
                               <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
@@ -220,9 +212,7 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className="row-arrow">
-                            <Link href={`/patients/${patient.id}`} onClick={(event) => event.stopPropagation()}>
-                              &gt;
-                            </Link>
+                            <Link href={`/patients/${patient.id}`}>&gt;</Link>
                           </td>
                         </tr>
                       ))

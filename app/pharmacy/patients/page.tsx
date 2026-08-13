@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Sidebar } from '../../components/Sidebar';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import { pharmacyPatientApi } from '../../lib/api';
@@ -37,15 +38,21 @@ export default function PharmacyPatientsPage() {
     }
 
     return patients.filter((patient) => {
-      const fullName = `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase();
-      return fullName.includes(query) || (patient.ghanaCard || '').toLowerCase().includes(query);
+      const fullName = (patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`).toLowerCase();
+      return fullName.includes(query) ||
+        (patient.patientCode || '').toLowerCase().includes(query) ||
+        (patient.ghanaCard || '').toLowerCase().includes(query);
     });
   }, [patients, searchQuery]);
 
-  const getInitials = (firstName?: string, lastName?: string) => {
-    const first = firstName?.[0] || '';
-    const last = lastName?.[0] || '';
-    return (first + last || 'U').toUpperCase();
+  const getInitials = (name?: string) => {
+    const initials = (name || 'Unknown')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('');
+    return initials.toUpperCase();
   };
 
   return (
@@ -90,21 +97,23 @@ export default function PharmacyPatientsPage() {
               />
             </div>
 
-            <table className="table hcp-table">
+            <table className="table hcp-table pharmacy-patients-table">
               <thead>
                 <tr>
                   <th>Patient</th>
+                  <th>Patient Code</th>
                   <th>Age</th>
+                  <th>Gender</th>
                   <th>Condition</th>
-                  <th>Last check-in</th>
                   <th>Adherence</th>
-                  <th>Action</th>
+                  <th>Facility</th>
+                  <th>BMI</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
                       Loading patients...
                     </td>
                   </tr>
@@ -112,20 +121,26 @@ export default function PharmacyPatientsPage() {
                   filteredPatients.map((patient) => (
                   <tr key={patient.id}>
                     <td>
-                      <div className="table-name-cell">
-                        <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
-                        {patient.firstName} {patient.lastName}
-                      </div>
+                      <Link href={`/pharmacy/patients/${patient.id}`} className="table-name-cell">
+                        <span className="table-avatar">{getInitials(patient.name)}</span>
+                        {patient.name || `${patient.firstName} ${patient.lastName}`}
+                      </Link>
                     </td>
+                    <td>{patient.patientCode || 'N/A'}</td>
                     <td>{patient.age}</td>
+                    <td>{patient.gender || 'N/A'}</td>
                     <td>{patient.chronicConditions?.join(', ') || 'N/A'}</td>
-                    <td>{patient.lastCheckIn || 'N/A'}</td>
-                    <td>{patient.adherence || 'N/A'}</td>
-                    <td className="text-muted">Summary only</td>
+                    <td>
+                      <span className={`status-pill status-${(patient.status || 'stable').toLowerCase()}`}>
+                        {patient.adherence || patient.status || 'N/A'}
+                      </span>
+                    </td>
+                    <td>{patient.facility || 'N/A'}</td>
+                    <td>{patient.bmi ?? 'N/A'}</td>
                   </tr>
                 ))) : (
                   <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
                       No patients found
                     </td>
                   </tr>
