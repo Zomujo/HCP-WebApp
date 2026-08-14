@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { hcpPatientApi } from '../lib/api';
+import { useAuth } from '../lib/AuthContext';
 
 interface DashboardStats {
   label: string;
   value: string;
+  href: string;
 }
 
 interface Appointment {
@@ -55,6 +57,7 @@ function buildWeeklyCheckInData(lastCheckInDates: string[]): Appointment[] {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats[]>([]);
@@ -67,8 +70,20 @@ export default function DashboardPage() {
         setIsLoading(true);
         setError('');
 
-        // Fetch patients
-        const patients = await hcpPatientApi.getPatients(1, 50);
+        // Use the same facility-scoped patient collection as the patients page.
+        const facilityId = user?.facilityId || user?.facility?.id;
+        if (!facilityId) {
+          setDashboardStats([]);
+          setRecentReadings([]);
+          setWeeklyAppointments([]);
+          return;
+        }
+
+        const patients = await hcpPatientApi.getPatientsWithOptions({
+          page: 1,
+          pageSize: 100,
+          facilityId,
+        });
         
         // Ensure patients is an array
         if (!Array.isArray(patients)) {
@@ -78,7 +93,6 @@ export default function DashboardPage() {
         // Calculate stats
         const totalPatients = patients.length;
         const criticalCount = patients.filter((patient) => (patient.criticalReadingsCount || 0) > 0 || patient.status === 'Critical').length;
-        const silentCount = patients.filter(p => p.status === 'Silent').length;
         const weeklyCheckIns = buildWeeklyCheckInData(
           patients
             .map((patient) => patient.lastCheckInAt)
@@ -86,9 +100,8 @@ export default function DashboardPage() {
         );
 
         setDashboardStats([
-          { label: 'Total Patients', value: totalPatients.toString() },
-          { label: 'Patients With Critical Readings', value: criticalCount.toString() },
-          { label: 'Silent Patients', value: silentCount.toString() },
+          { label: 'Total Patients', value: totalPatients.toString(), href: '/patients' },
+          { label: 'Patients With Critical Readings', value: criticalCount.toString(), href: '/patients' },
         ]);
 
         // Set recent readings (first 3 patients with critical/caution status)
@@ -107,7 +120,7 @@ export default function DashboardPage() {
     };
 
     loadDashboardData();
-  }, []);
+  }, [user?.facilityId, user?.facility?.id]);
 
   const getInitials = (firstName?: string, lastName?: string) => {
     const first = firstName?.[0] || '';
@@ -147,10 +160,10 @@ export default function DashboardPage() {
             <>
               <section className="stats-row-figma">
                 {dashboardStats.map((stat) => (
-                  <div key={stat.label} className="stat-box-figma">
+                  <Link key={stat.label} href={stat.href} className="stat-box-figma">
                     <p className="overline">{stat.label}</p>
                     <p className="stat-value">{stat.value}</p>
-                  </div>
+                  </Link>
                 ))}
               </section>
 
@@ -180,7 +193,7 @@ export default function DashboardPage() {
                   <Link href="/patients" className="text-link">See All Patients</Link>
                 </div>
 
-                <table className="table hcp-table">
+                <table className="table hcp-table dashboard-readings-table">
                   <thead>
                     <tr>
                       <th>Name</th>

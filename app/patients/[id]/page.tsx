@@ -365,11 +365,6 @@ export default function PatientDetailsPage() {
               <p className="text-muted" style={{ margin: '4px 0 0' }}>
                 {patient.age} • {patient.chronicConditions?.join(', ') || 'N/A'} • Patient since {patient.joined || 'N/A'}
               </p>
-              <div className="patient-chip-row">
-                <span className="badge badge-critical">△ 3 critical readings</span>
-                <span className="badge badge-caution">Adherence {patient.adherence || '64%'}</span>
-                <span className="badge badge-stable">Assigned to you</span>
-              </div>
             </div>
           </section>
 

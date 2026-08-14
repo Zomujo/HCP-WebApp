@@ -3125,6 +3125,18 @@ a.primary.small {
   overflow: hidden;
 }
 
+.table.hcp-table.dashboard-readings-table {
+  display: table;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.dashboard-readings-table th,
+.dashboard-readings-table td {
+  padding: 16px 14px;
+}
+
 .hcp-table th,
 .hcp-table td {
   font-size: 0.82rem;
