@@ -39,7 +39,7 @@ function mapBloodPressureLogs(logs: any[]): BloodPressureReading[] {
       if (!parsed) return null;
       return {
         ...parsed,
-        recordedAt: log.recordedAt || log.createdAt || log.date || new Date().toISOString(),
+        recordedAt: log.recordedAt || log.createdAt || log.date || '',
       };
     })
     .filter((reading): reading is BloodPressureReading => reading !== null)
@@ -53,15 +53,34 @@ function mapBloodSugarLogs(logs: any[]): BloodSugarReading[] {
         String(vital.vitalType || vital.type || '').toLowerCase().includes('bloodsugar') ||
         String(vital.vitalType || vital.type || '').toLowerCase().includes('glucose')
       );
-      const value = Number(bloodSugar?.value || log.bloodSugar || log.glucose);
+      const directVitalType = String(log.vitalType || log.type || '').toLowerCase();
+      const directBloodSugar = directVitalType.includes('bloodsugar') || directVitalType.includes('glucose');
+      const value = Number(directBloodSugar ? log.value : bloodSugar?.value || log.bloodSugar || log.glucose);
       if (!Number.isFinite(value)) return null;
       return {
         value,
-        recordedAt: log.recordedAt || log.createdAt || log.date || new Date().toISOString(),
+        recordedAt: log.recordedAt || log.createdAt || log.date || '',
       };
     })
     .filter((reading): reading is BloodSugarReading => reading !== null)
     .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
+}
+
+function mergeVitalEntries(logs: any[], latestVitals: any[]): any[] {
+  const entries = [...logs, ...latestVitals];
+  const seen = new Set<string>();
+
+  return entries.filter((entry) => {
+    const nestedVitals = Array.isArray(entry.vitals) ? entry.vitals : [];
+    const vitalValues = nestedVitals.length > 0
+      ? nestedVitals.map((vital: any) => `${vital.vitalType || vital.type || ''}:${vital.value ?? ''}`).join('|')
+      : `${entry.vitalType || entry.type || ''}:${entry.value ?? entry.bloodPressure ?? entry.bloodSugar ?? ''}`;
+    const recordedAt = entry.recordedAt || entry.createdAt || entry.date || '';
+    const key = `${recordedAt}|${vitalValues}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function formatAppointmentDate(value?: string): string {
@@ -77,6 +96,13 @@ function formatAppointmentDate(value?: string): string {
   });
 }
 
+function getBloodPressureSeverity(reading?: BloodPressureReading): string {
+  if (!reading) return 'NO READING';
+  if (reading.systolic >= 140 || reading.diastolic >= 90) return 'CRITICAL';
+  if (reading.systolic >= 130 || reading.diastolic >= 80) return 'WARNING';
+  return 'NORMAL';
+}
+
 export default function PatientDetailsPage() {
   const params = useParams<{ id: string }>();
   const patientId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -87,6 +113,8 @@ export default function PatientDetailsPage() {
   const [vitals, setVitals] = useState<any[]>([]);
   const [bloodPressureReadings, setBloodPressureReadings] = useState<BloodPressureReading[]>([]);
   const [bloodSugarReadings, setBloodSugarReadings] = useState<BloodSugarReading[]>([]);
+  const [latestBloodPressureReading, setLatestBloodPressureReading] = useState<BloodPressureReading | undefined>();
+  const [latestBloodSugarReading, setLatestBloodSugarReading] = useState<BloodSugarReading | undefined>();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [messageText, setMessageText] = useState('');
@@ -100,6 +128,7 @@ export default function PatientDetailsPage() {
     notes: '',
   });
   const [isSavingVitals, setIsSavingVitals] = useState(false);
+  const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
   const [isEditingPatient, setIsEditingPatient] = useState(false);
   const [isUpdatingPatient, setIsUpdatingPatient] = useState(false);
   const [patientEditForm, setPatientEditForm] = useState({
@@ -128,8 +157,16 @@ export default function PatientDetailsPage() {
         setPatient(patientData);
         setVitals(Array.isArray(vitalsData) ? vitalsData : []);
         const logsArray = Array.isArray(vitalLogs) ? vitalLogs : [];
-        setBloodPressureReadings(mapBloodPressureLogs(logsArray));
-        setBloodSugarReadings(mapBloodSugarLogs(logsArray));
+        const latestVitalsArray = Array.isArray(vitalsData)
+          ? vitalsData
+          : vitalsData && typeof vitalsData === 'object'
+            ? [vitalsData]
+            : [];
+        const allVitalEntries = mergeVitalEntries(logsArray, latestVitalsArray);
+        setBloodPressureReadings(mapBloodPressureLogs(allVitalEntries));
+        setBloodSugarReadings(mapBloodSugarLogs(allVitalEntries));
+        setLatestBloodPressureReading(mapBloodPressureLogs(latestVitalsArray).at(-1));
+        setLatestBloodSugarReading(mapBloodSugarLogs(latestVitalsArray).at(-1));
         setAppointments(appointmentsData);
         setMedications(medicationsData);
       } catch (err) {
@@ -196,12 +233,21 @@ export default function PatientDetailsPage() {
       });
 
       setVitalForm({ bloodPressure: '', bloodSugar: '', notes: '' });
+      setIsVitalsModalOpen(false);
       const refreshedVitals = await hcpPatientApi.getPatientVitals(patientId).catch(() => []);
       setVitals(Array.isArray(refreshedVitals) ? refreshedVitals : []);
       const refreshedLogs = await hcpPatientApi.getPatientVitalHistoryLogs(patientId).catch(() => []);
       const logsArray = Array.isArray(refreshedLogs) ? refreshedLogs : [];
-      setBloodPressureReadings(mapBloodPressureLogs(logsArray));
-      setBloodSugarReadings(mapBloodSugarLogs(logsArray));
+      const latestVitalsArray = Array.isArray(refreshedVitals)
+        ? refreshedVitals
+        : refreshedVitals && typeof refreshedVitals === 'object'
+          ? [refreshedVitals]
+          : [];
+      const allVitalEntries = mergeVitalEntries(logsArray, latestVitalsArray);
+      setBloodPressureReadings(mapBloodPressureLogs(allVitalEntries));
+      setBloodSugarReadings(mapBloodSugarLogs(allVitalEntries));
+      setLatestBloodPressureReading(mapBloodPressureLogs(latestVitalsArray).at(-1));
+      setLatestBloodSugarReading(mapBloodSugarLogs(latestVitalsArray).at(-1));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save patient vitals');
     } finally {
@@ -335,21 +381,18 @@ export default function PatientDetailsPage() {
 
   const upcoming = appointments.filter((a) => a.status === 'scheduled' || a.status === 'active');
   const past = appointments.filter((a) => a.status === 'completed' || a.status === 'cancelled');
-  const chartReadings = bloodPressureReadings.length > 0 ? bloodPressureReadings : [
-    { recordedAt: new Date().toISOString(), systolic: patient.vitals?.systolic || 168, diastolic: patient.vitals?.diastolic || 102 },
-  ];
+  const chartReadings = bloodPressureReadings;
   const chartMax = Math.max(180, ...chartReadings.map((reading) => reading.systolic + 20));
   const chartY = (value: number) => 205 - (value / chartMax) * 170;
-  const currentBloodPressure = patient?.vitals?.systolic && patient?.vitals?.diastolic
-    ? `${patient.vitals.systolic} / ${patient.vitals.diastolic}`
-    : '168 / 102';
+  const latestBloodPressure = latestBloodPressureReading;
+  const currentBloodPressure = latestBloodPressure
+    ? `${latestBloodPressure.systolic} / ${latestBloodPressure.diastolic}`
+    : 'No reading recorded';
   
-  const bloodSugarChartReadings = bloodSugarReadings.length > 0 ? bloodSugarReadings : [
-    { recordedAt: new Date().toISOString(), value: patient.bloodSugar || 72 },
-  ];
+  const bloodSugarChartReadings = bloodSugarReadings;
   const bloodSugarChartMax = Math.max(200, ...bloodSugarChartReadings.map((reading) => reading.value + 20));
   const bloodSugarChartY = (value: number) => 205 - (value / bloodSugarChartMax) * 170;
-  const currentBloodSugar = patient.bloodSugar || 72;
+  const currentBloodSugar = latestBloodSugarReading?.value;
 
   return (
     <ProtectedRoute requiredRole="health-worker">
@@ -542,30 +585,58 @@ export default function PatientDetailsPage() {
                 <p className="panel-title">Latest vitals</p>
                 <div className="latest-vitals-box">
                   <p className="block-label" style={{ color: '#c14d4d' }}>
-                    CRITICAL
+                    {getBloodPressureSeverity(latestBloodPressure)}
                   </p>
                   <p className="latest-vitals-value">{currentBloodPressure}</p>
-                  <p className="text-muted" style={{ margin: 0 }}>mmHg • Today 07:42 · AI check-in</p>
+                  <p className="text-muted" style={{ margin: 0 }}>mmHg</p>
                 </div>
               </div>
             </section>
           )}
 
           {activeTab === 'Readings' && (
-            <section className="panel hcp-panel">
-              {/* Blood Pressure Section */}
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Blood pressure</h3>
-                  <span style={{ fontSize: '1.3rem', fontWeight: 600 }}>
-                    {chartReadings.length > 0 
-                      ? `${chartReadings[chartReadings.length - 1].systolic}/${chartReadings[chartReadings.length - 1].diastolic}`
-                      : currentBloodPressure
-                    }
+            <section className="readings-workspace">
+              <div className="readings-page-intro">
+                <div>
+                  <p className="eyebrow">Clinical monitoring</p>
+                  <h2>Patient readings</h2>
+                  <p>Review trends and record a new measurement for this patient.</p>
+                </div>
+                <div className={`reading-status ${getBloodPressureSeverity(latestBloodPressure).toLowerCase().replace(' ', '-')}`}>
+                  <span className="reading-status-dot" />
+                  {getBloodPressureSeverity(latestBloodPressure)}
+                </div>
+              </div>
+
+              <div className="readings-summary-grid">
+                <div className="reading-summary-card reading-summary-card-primary">
+                  <span className="reading-summary-label">Blood pressure</span>
+                  <strong>{currentBloodPressure}</strong>
+                  <span>mmHg · latest reading</span>
+                </div>
+                <div className="reading-summary-card">
+                  <span className="reading-summary-label">Blood glucose</span>
+                  <strong>{currentBloodSugar ?? '—'}</strong>
+                  <span>mmol/L · latest reading</span>
+                </div>
+                <div className="reading-summary-card">
+                  <span className="reading-summary-label">Recorded readings</span>
+                  <strong>{chartReadings.length}</strong>
+                  <span>blood pressure entries</span>
+                </div>
+              </div>
+
+              <div className="readings-panel readings-panel-chart">
+                <div className="readings-section-heading">
+                  <div>
+                    <p className="eyebrow">Trend analysis</p>
+                    <h3>Blood pressure</h3>
+                  </div>
+                  <span className="readings-current-value">
+                    {currentBloodPressure}
                   </span>
                 </div>
-                <p style={{ margin: '0 0 16px 0', color: '#999', fontSize: '0.9rem' }}>Latest reading</p>
-                <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: '0.95rem' }}>Your blood pressure trend over this period.</p>
+                <p className="readings-description">Systolic and diastolic pressure across recorded visits.</p>
 
                 <div className="readings-chart-box">
                   <div className="readings-chart-inner">
@@ -575,12 +646,6 @@ export default function PatientDetailsPage() {
                       ))}
                       {Array.from({ length: 12 }).map((_, index) => (
                         <line key={`v-${index}`} x1={60 + index * 56} y1="30" x2={60 + index * 56} y2="205" className="chart-grid-line" />
-                      ))}
-
-                      {chartReadings.map((reading, index) => (
-                        <text key={reading.recordedAt + index} x={60 + (index * 620) / Math.max(1, chartReadings.length - 1)} y="225" textAnchor="middle" className="chart-axis-text">
-                          {new Date(reading.recordedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                        </text>
                       ))}
 
                       <text x="8" y="118" className="chart-axis-text">mmHg</text>
@@ -613,11 +678,11 @@ export default function PatientDetailsPage() {
                       ))}
                       
                       {/* Latest value tooltip for BP */}
-                      {chartReadings.length > 0 && (
+                      {chartReadings.length > 0 && latestBloodPressure && (
                         <g>
                           <rect
                             x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1) - 40}
-                            y={chartY(chartReadings[chartReadings.length - 1].systolic) - 50}
+                            y={chartY(latestBloodPressure.systolic) - 50}
                             width="80"
                             height="50"
                             fill="#2c3e50"
@@ -625,23 +690,23 @@ export default function PatientDetailsPage() {
                           />
                           <text
                             x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1)}
-                            y={chartY(chartReadings[chartReadings.length - 1].systolic) - 25}
+                            y={chartY(latestBloodPressure.systolic) - 25}
                             textAnchor="middle"
                             fill="white"
                             fontSize="14"
                             fontWeight="600"
                           >
-                            {chartReadings[chartReadings.length - 1].systolic}
+                            {latestBloodPressure.systolic}
                           </text>
                           <text
                             x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1)}
-                            y={chartY(chartReadings[chartReadings.length - 1].systolic) - 10}
+                            y={chartY(latestBloodPressure.systolic) - 10}
                             textAnchor="middle"
                             fill="white"
                             fontSize="14"
                             fontWeight="600"
                           >
-                            {chartReadings[chartReadings.length - 1].diastolic}
+                            {latestBloodPressure.diastolic}
                           </text>
                         </g>
                       )}
@@ -649,25 +714,23 @@ export default function PatientDetailsPage() {
                   </div>
                 </div>
 
-                <div className="readings-legend-row" style={{ marginTop: 12 }}>
+                <div className="readings-legend-row">
                   <span className="readings-legend-item"><span className="legend-dot systolic" /> Systolic</span>
                   <span className="readings-legend-item"><span className="legend-dot diastolic" /> Diastolic</span>
                 </div>
               </div>
 
-              {/* Blood Sugar Section */}
-              <div style={{ marginTop: 32 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Blood Glucose</h3>
-                  <span style={{ fontSize: '1.3rem', fontWeight: 600 }}>
-                    {bloodSugarChartReadings.length > 0 
-                      ? `${bloodSugarChartReadings[bloodSugarChartReadings.length - 1].value}`
-                      : currentBloodSugar
-                    }
+              <div className="readings-panel readings-panel-chart">
+                <div className="readings-section-heading">
+                  <div>
+                    <p className="eyebrow">Trend analysis</p>
+                    <h3>Blood glucose</h3>
+                  </div>
+                  <span className="readings-current-value">
+                    {currentBloodSugar ?? 'No reading recorded'}
                   </span>
                 </div>
-                <p style={{ margin: '0 0 16px 0', color: '#999', fontSize: '0.9rem' }}>mmol/L</p>
-                <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: '0.95rem' }}>Your blood glucose trend over this period.</p>
+                <p className="readings-description">Glucose values across recorded visits.</p>
 
                 <div className="readings-chart-box">
                   <div className="readings-chart-inner">
@@ -677,12 +740,6 @@ export default function PatientDetailsPage() {
                       ))}
                       {Array.from({ length: 12 }).map((_, index) => (
                         <line key={`v-${index}`} x1={60 + index * 56} y1="30" x2={60 + index * 56} y2="205" className="chart-grid-line" />
-                      ))}
-
-                      {bloodSugarChartReadings.map((reading, index) => (
-                        <text key={reading.recordedAt + index} x={60 + (index * 620) / Math.max(1, bloodSugarChartReadings.length - 1)} y="225" textAnchor="middle" className="chart-axis-text">
-                          {new Date(reading.recordedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                        </text>
                       ))}
 
                       <text x="8" y="118" className="chart-axis-text">mmol/L</text>
@@ -702,11 +759,11 @@ export default function PatientDetailsPage() {
                       ))}
 
                       {/* Latest value tooltip for Blood Sugar */}
-                      {bloodSugarChartReadings.length > 0 && (
+                      {bloodSugarChartReadings.length > 0 && latestBloodSugarReading && (
                         <g>
                           <rect
                             x={60 + ((bloodSugarChartReadings.length - 1) * 620) / Math.max(1, bloodSugarChartReadings.length - 1) - 35}
-                            y={bloodSugarChartY(bloodSugarChartReadings[bloodSugarChartReadings.length - 1].value) - 40}
+                            y={bloodSugarChartY(latestBloodSugarReading.value) - 40}
                             width="70"
                             height="40"
                             fill="#2c3e50"
@@ -714,13 +771,13 @@ export default function PatientDetailsPage() {
                           />
                           <text
                             x={60 + ((bloodSugarChartReadings.length - 1) * 620) / Math.max(1, bloodSugarChartReadings.length - 1)}
-                            y={bloodSugarChartY(bloodSugarChartReadings[bloodSugarChartReadings.length - 1].value) - 15}
+                            y={bloodSugarChartY(latestBloodSugarReading.value) - 15}
                             textAnchor="middle"
                             fill="white"
                             fontSize="14"
                             fontWeight="600"
                           >
-                            {bloodSugarChartReadings[bloodSugarChartReadings.length - 1].value}
+                            {latestBloodSugarReading.value}
                           </text>
                         </g>
                       )}
@@ -728,26 +785,61 @@ export default function PatientDetailsPage() {
                   </div>
                 </div>
 
-                <div className="readings-legend-row" style={{ marginTop: 12 }}>
+                <div className="readings-legend-row">
                   <span className="readings-legend-item"><span className="legend-dot systolic" /> Blood Glucose</span>
                 </div>
               </div>
 
-              {/* Comments and Actions Section */}
-
-              <div className="panel hcp-panel" style={{ marginTop: 18 }}>
-                <div className="panel-headline-row" style={{ marginBottom: 12 }}>
-                  <p className="panel-title">Record patient vitals</p>
+              <div className="readings-panel readings-entry-panel readings-entry-launcher">
+                <div className="readings-section-heading">
+                  <div>
+                    <p className="eyebrow">Clinical action</p>
+                    <h3>Record a new set of vitals</h3>
+                    <p className="readings-description">Add measurements taken during this visit.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary readings-launch-button"
+                    onClick={() => setIsVitalsModalOpen(true)}
+                  >
+                    Record vitals
+                  </button>
                 </div>
+              </div>
 
-                <div className="onboarding-grid-two">
+              {isVitalsModalOpen && (
+                <div className="modal-backdrop" onClick={() => setIsVitalsModalOpen(false)}>
+                  <section
+                    className="readings-vitals-modal"
+                    onClick={(event) => event.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="record-vitals-title"
+                  >
+                    <div className="readings-modal-header">
+                      <div>
+                        <p className="eyebrow">New entry</p>
+                        <h3 id="record-vitals-title">Record patient vitals</h3>
+                        <p className="readings-description">Add the measurements taken during this visit.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="readings-modal-close"
+                        onClick={() => setIsVitalsModalOpen(false)}
+                        aria-label="Close record vitals dialog"
+                      >
+                        ×
+                      </button>
+                    </div>
+
+                    <div className="readings-entry-grid">
                   <label>
                     <span className="onboarding-field-label">Blood pressure</span>
                     <input
                       type="text"
                       value={vitalForm.bloodPressure}
                       onChange={(event) => setVitalForm((prev) => ({ ...prev, bloodPressure: event.target.value }))}
-                      placeholder="120/80"
+                      placeholder="e.g. 120/80"
                     />
                   </label>
 
@@ -757,45 +849,90 @@ export default function PatientDetailsPage() {
                       type="text"
                       value={vitalForm.bloodSugar}
                       onChange={(event) => setVitalForm((prev) => ({ ...prev, bloodSugar: event.target.value }))}
-                      placeholder="72"
+                      placeholder="e.g. 5.9"
                     />
                   </label>
                 </div>
 
-                <label style={{ marginTop: 12, display: 'block' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="readings-notes-field">
+                  <div className="readings-field-heading">
                     <span className="onboarding-field-label">Notes</span>
-                    <span style={{ fontSize: '0.875rem', color: '#999' }}>
+                    <span className="readings-character-count">
                       {vitalForm.notes.length}/500
                     </span>
                   </div>
                   <textarea
                     value={vitalForm.notes}
                     onChange={(event) => setVitalForm((prev) => ({ ...prev, notes: event.target.value.slice(0, 500) }))}
-                    placeholder="Patient was resting during measurement..."
+                    placeholder="Add context about this measurement (optional)"
                     rows={3}
                     maxLength={500}
                   />
                 </label>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-                  <button
-                    type="button"
-                    className="primary small"
-                    onClick={handleSaveVitals}
-                    disabled={isSavingVitals}
-                  >
-                    {isSavingVitals ? 'Saving...' : 'Save vitals'}
-                  </button>
+                    <div className="readings-entry-actions">
+                      <button
+                        type="button"
+                        className="ghost small"
+                        onClick={() => setIsVitalsModalOpen(false)}
+                        disabled={isSavingVitals}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="primary small"
+                        onClick={handleSaveVitals}
+                        disabled={isSavingVitals}
+                      >
+                        {isSavingVitals ? 'Saving...' : 'Save vitals'}
+                      </button>
+                    </div>
+                  </section>
                 </div>
-              </div>
+              )}
 
-              {bloodPressureReadings.slice(-4).reverse().map((reading) => (
-                <div key={reading.recordedAt} className="reading-mini-card" style={{ marginTop: 12 }}>
-                  <p style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}><strong>BP</strong> {reading.systolic} / {reading.diastolic} mmHg</p>
-                  <p className="text-muted" style={{ marginTop: 4, margin: 0 }}>{formatAppointmentDate(reading.recordedAt)}</p>
+              {bloodPressureReadings.length > 0 && (
+                <div className="readings-history-panel">
+                  <div className="readings-section-heading">
+                    <div>
+                      <p className="eyebrow">History</p>
+                      <h3>Recent blood pressure readings</h3>
+                    </div>
+                    <span className="history-count">{bloodPressureReadings.length} total</span>
+                  </div>
+                  <div className="readings-history-list">
+                    {bloodPressureReadings.slice(-4).reverse().map((reading, index) => (
+                      <div key={`${reading.systolic}-${reading.diastolic}-${reading.recordedAt}-${index}`} className="reading-mini-card">
+                        <span className="history-reading-label">BP</span>
+                        <strong>{reading.systolic} / {reading.diastolic}</strong>
+                        <span className="history-reading-unit">mmHg</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {bloodSugarReadings.length > 0 && (
+                <div className="readings-history-panel">
+                  <div className="readings-section-heading">
+                    <div>
+                      <p className="eyebrow">History</p>
+                      <h3>Recent blood sugar readings</h3>
+                    </div>
+                    <span className="history-count">{bloodSugarReadings.length} total</span>
+                  </div>
+                  <div className="readings-history-list">
+                    {bloodSugarReadings.slice(-4).reverse().map((reading, index) => (
+                      <div key={`${reading.value}-${reading.recordedAt}-${index}`} className="reading-mini-card">
+                        <span className="history-reading-label">GLU</span>
+                        <strong>{reading.value}</strong>
+                        <span className="history-reading-unit">mmol/L</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -804,19 +941,10 @@ export default function PatientDetailsPage() {
               <div className="panel hcp-panel">
                 <div className="panel-headline-row" style={{ marginBottom: 10 }}>
                   <p className="panel-title">30-day adherence</p>
-                  <p className="text-muted" style={{ margin: 0 }}><strong style={{ color: '#f2994a' }}>{patient.adherence || '64%'}</strong> overall</p>
+                  <p className="text-muted" style={{ margin: 0 }}><strong style={{ color: '#f2994a' }}>{patient.adherence || 'N/A'}</strong> overall</p>
                 </div>
 
-                <div className="adherence-grid">
-                  {Array.from({ length: 30 }).map((_, index) => (
-                    <span key={index} className={`adherence-cell-dot ${[2, 7, 13, 18, 24].includes(index) ? 'missed' : ''}`} />
-                  ))}
-                </div>
-
-                <div className="readings-legend-row" style={{ marginTop: 10 }}>
-                  <span className="readings-legend-item"><span className="legend-dot taken" /> Taken</span>
-                  <span className="readings-legend-item"><span className="legend-dot diastolic" style={{ background: '#c2ccda' }} /> Missed</span>
-                </div>
+                <p className="text-muted">No medication adherence data recorded.</p>
 
                 <label style={{ marginTop: 16, display: 'block' }}>
                   <span className="block-label">Note to patient about adherence</span>
@@ -842,23 +970,12 @@ export default function PatientDetailsPage() {
                         {[med.dose, med.frequency].filter(Boolean).join(' • ') || '1 tablet, every morning'}
                       </p>
                       <p style={{ margin: '6px 0 0', color: '#ef6b6b', fontWeight: 700, fontSize: '0.82rem' }}>
-                        Adherence {med.adherence || '71%'}
+                        Adherence {med.adherence || 'N/A'}
                       </p>
                     </div>
                   ))
                 ) : (
-                  <>
-                    <div className="prescription-card">
-                      <p style={{ margin: 0, fontWeight: 700 }}>Amlodipine 5mg</p>
-                      <p className="text-muted" style={{ margin: '4px 0 0' }}>1 tablet, every morning</p>
-                      <p style={{ margin: '6px 0 0', color: '#ef6b6b', fontWeight: 700, fontSize: '0.82rem' }}>Adherence 71%</p>
-                    </div>
-                    <div className="prescription-card">
-                      <p style={{ margin: 0, fontWeight: 700 }}>Hydrochlorothiazide 25mg</p>
-                      <p className="text-muted" style={{ margin: '4px 0 0' }}>1 tablet, every morning</p>
-                      <p style={{ margin: '6px 0 0', color: '#ef6b6b', fontWeight: 700, fontSize: '0.82rem' }}>Adherence 57%</p>
-                    </div>
-                  </>
+                  <p className="text-muted">No prescriptions recorded.</p>
                 )}
               </div>
             </section>
