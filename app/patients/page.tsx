@@ -9,68 +9,21 @@ import { useAuth } from '../lib/AuthContext';
 import { hcpPatientApi } from '../lib/api';
 import type { Patient } from '../lib/api';
 
-type FilterKey =
-  | 'all'
-  | 'bp-normal'
-  | 'bp-elevated'
-  | 'bp-stage-1'
-  | 'bp-stage-2'
-  | 'bp-severe'
-  | 'glucose-critical-low'
-  | 'glucose-low'
-  | 'glucose-target'
-  | 'glucose-slightly-high'
-  | 'glucose-high'
-  | 'glucose-very-high'
-  | 'glucose-critical';
+type FilterKey = string;
 
-const FILTER_GROUPS: Array<{ label: string; options: Array<{ key: FilterKey; label: string }> }> = [
-  {
-    label: 'Blood pressure',
-    options: [
-      { key: 'bp-normal', label: 'Normal' },
-      { key: 'bp-elevated', label: 'Elevated' },
-      { key: 'bp-stage-1', label: 'Stage 1 Hypertension' },
-      { key: 'bp-stage-2', label: 'Stage 2 Hypertension' },
-      { key: 'bp-severe', label: 'Severely High / Critical' },
-    ],
-  },
-  {
-    label: 'Blood glucose',
-    options: [
-      { key: 'glucose-critical-low', label: 'Critically Low' },
-      { key: 'glucose-low', label: 'Low' },
-      { key: 'glucose-target', label: 'In Target' },
-      { key: 'glucose-slightly-high', label: 'Slightly High' },
-      { key: 'glucose-high', label: 'High' },
-      { key: 'glucose-very-high', label: 'Very High' },
-      { key: 'glucose-critical', label: 'Critical' },
-    ],
-  },
-];
+const getCreatedPatientsStorageKey = (facilityId: string) => `hcp-created-patients:${facilityId}`;
+
+function readCreatedPatients(facilityId: string): Patient[] {
+  try {
+    const stored = JSON.parse(localStorage.getItem(getCreatedPatientsStorageKey(facilityId)) || '[]');
+    return Array.isArray(stored) ? stored.filter((patient) => patient?.id) : [];
+  } catch {
+    return [];
+  }
+}
 
 function matchesFilter(patient: Patient, filter: FilterKey): boolean {
-  if (filter === 'all') return true;
-  if (filter.startsWith('glucose-')) {
-    const glucose = patient.bloodSugar;
-    if (glucose === undefined) return false;
-    if (filter === 'glucose-critical-low') return glucose < 54;
-    if (filter === 'glucose-low') return glucose >= 54 && glucose <= 69;
-    if (filter === 'glucose-target') return glucose >= 80 && glucose <= 130;
-    if (filter === 'glucose-slightly-high') return glucose >= 131 && glucose <= 179;
-    if (filter === 'glucose-high') return glucose >= 180 && glucose <= 249;
-    if (filter === 'glucose-very-high') return glucose >= 250 && glucose <= 299;
-    return glucose >= 300;
-  }
-
-  const bloodPressure = patient.vitals;
-  if (!bloodPressure) return false;
-  const { systolic, diastolic } = bloodPressure;
-  if (filter === 'bp-normal') return systolic < 120 && diastolic < 80;
-  if (filter === 'bp-elevated') return systolic >= 120 && systolic <= 129 && diastolic < 80;
-  if (filter === 'bp-stage-1') return (systolic >= 130 && systolic <= 139) || (diastolic >= 80 && diastolic <= 89);
-  if (filter === 'bp-stage-2') return (systolic >= 140 && systolic < 180) || (diastolic >= 90 && diastolic < 120);
-  return systolic >= 180 || diastolic >= 120;
+  return filter === 'all' || patient.status === filter;
 }
 
 export default function PatientsPage() {
@@ -86,6 +39,10 @@ export default function PatientsPage() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const pageSize = 10;
+  const statusOptions = useMemo(
+    () => Array.from(new Set(patients.map((patient) => patient.status).filter(Boolean))) as string[],
+    [patients]
+  );
 
   useEffect(() => {
     const loadPatients = async () => {
@@ -106,7 +63,11 @@ export default function PatientsPage() {
           facilityId,
         });
 
-        setPatients(data);
+        const locallyCreatedPatients = readCreatedPatients(facilityId);
+        setPatients([
+          ...locallyCreatedPatients,
+          ...data.filter((patient) => !locallyCreatedPatients.some((localPatient) => localPatient.id === patient.id)),
+        ]);
       } catch (err) {
         console.error('Failed to load patients:', err);
         setError('Failed to load patients');
@@ -151,11 +112,93 @@ export default function PatientsPage() {
 
   const handleRegisterPatient = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // This would typically send data to an API endpoint
-    // For now, we'll just close the modal
-    // In a real app, you might use: await patientApi.registerPatient(...)
-    setShowRegisterModal(false);
-    event.currentTarget.reset();
+    const form = event.currentTarget;
+    try {
+      setIsRegistering(true);
+      setError('');
+
+      const formData = new FormData(form);
+      const facilityId = user?.facilityId || user?.facility?.id;
+      const selectedCondition = String(formData.get('chronicConditions') || '');
+      const chronicConditions = selectedCondition === 'both'
+        ? ['hypertension', 'diabetes']
+        : selectedCondition
+          ? [selectedCondition]
+          : [];
+      const dateOfBirthValue = String(formData.get('dateOfBirth') || '');
+
+      if (!facilityId) {
+        setError('Your facility could not be identified.');
+        return;
+      }
+
+      const createdPatientId = await hcpPatientApi.createPatient({
+        ghanaCardNumber: String(formData.get('ghanaCardNumber') || '').trim(),
+        nhisNumber: String(formData.get('nhisNumber') || '').trim(),
+        phoneNumber: String(formData.get('phoneNumber') || '').trim(),
+        dateOfBirth: dateOfBirthValue,
+        gender: String(formData.get('gender') || 'other') as 'male' | 'female' | 'other',
+        chronicConditions,
+        firstname: String(formData.get('firstname') || '').trim(),
+        lastname: String(formData.get('lastname') || '').trim(),
+        age: Number(formData.get('age')),
+        facilityId,
+      });
+
+      if (createdPatientId) {
+        let createdPatient: Patient = {
+          id: createdPatientId,
+          firstName: String(formData.get('firstname') || '').trim(),
+          lastName: String(formData.get('lastname') || '').trim(),
+          name: `${String(formData.get('firstname') || '').trim()} ${String(formData.get('lastname') || '').trim()}`.trim(),
+          age: Number(formData.get('age')),
+          gender: String(formData.get('gender') || ''),
+          chronicConditions,
+          ghanaCard: String(formData.get('ghanaCardNumber') || '').trim(),
+          nhis: String(formData.get('nhisNumber') || '').trim(),
+        };
+
+        try {
+          createdPatient = await hcpPatientApi.getPatientById(createdPatientId);
+        } catch {
+          // Keep the confirmed create response visible while the detail endpoint catches up.
+        }
+
+        const storageKey = getCreatedPatientsStorageKey(facilityId);
+        const locallyCreatedPatients = readCreatedPatients(facilityId).filter((patient) => patient.id !== createdPatientId);
+        localStorage.setItem(storageKey, JSON.stringify([createdPatient, ...locallyCreatedPatients]));
+
+        let refreshedPatients: Patient[] = [];
+        try {
+          refreshedPatients = await hcpPatientApi.getPatientsWithOptions({
+            page: 1,
+            pageSize: 100,
+            facilityId,
+          });
+        } catch {
+          // The confirmed local record remains visible if the list endpoint is temporarily stale.
+        }
+
+        setPatients([
+          createdPatient,
+          ...refreshedPatients.filter((patient) => patient.id !== createdPatientId),
+        ]);
+        setCurrentPage(1);
+      } else {
+        const refreshedPatients = await hcpPatientApi.getPatientsWithOptions({
+          page: 1,
+          pageSize: 100,
+          facilityId,
+        });
+        setPatients(refreshedPatients);
+      }
+      setShowRegisterModal(false);
+      form.reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add patient');
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
   const getInitials = (firstName?: string, lastName?: string) => {
@@ -203,25 +246,23 @@ export default function PatientsPage() {
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                 />
-                <div className="filter-groups" aria-label="Clinical filters">
+                <div className="filter-groups" aria-label="Patient status filters">
                   <button type="button" className={`filter-pill ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => setActiveFilter('all')}>All</button>
-                  {FILTER_GROUPS.map((group) => (
-                    <div key={group.label} className="filter-group">
-                      <span className="filter-group-label">{group.label}</span>
-                      <div className="filter-row">
-                        {group.options.map((filter) => (
-                          <button
-                            key={filter.key}
-                            type="button"
-                            className={`filter-pill ${activeFilter === filter.key ? 'active' : ''}`}
-                            onClick={() => setActiveFilter(filter.key)}
-                          >
-                            {filter.label}
-                          </button>
-                        ))}
-                      </div>
+                  <div className="filter-group">
+                    <span className="filter-group-label">Status</span>
+                    <div className="filter-row">
+                      {statusOptions.map((status) => (
+                        <button
+                          key={status}
+                          type="button"
+                          className={`filter-pill ${activeFilter === status ? 'active' : ''}`}
+                          onClick={() => setActiveFilter(status)}
+                        >
+                          {status}
+                        </button>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               </div>
 
@@ -328,79 +369,69 @@ export default function PatientsPage() {
                   </button>
                 </div>
 
-                <form
-                  onSubmit={(event) => {
-                    const form = event.currentTarget;
-                    const phoneInput = form.elements.namedItem('phone') as HTMLInputElement | null;
-                    const phoneValue = phoneInput?.value?.trim() || '';
-
-                    if (phoneValue && !/^\+233\d{9}$/.test(phoneValue)) {
-                      event.preventDefault();
-                      phoneInput?.setCustomValidity('Use the format +233XXXXXXXXX');
-                      phoneInput?.reportValidity();
-                      return;
-                    }
-
-                    if (phoneInput) {
-                      phoneInput.setCustomValidity('');
-                    }
-
-                    handleRegisterPatient(event);
-                  }}
-                >
-                  <label>
-                    <span className="onboarding-field-label">Full name</span>
-                    <input name="fullName" required placeholder="Enter patient name" />
-                  </label>
+                <form onSubmit={handleRegisterPatient}>
+                  <div className="onboarding-grid-two">
+                    <label>
+                      <span className="onboarding-field-label">First name</span>
+                      <input name="firstname" required placeholder="First name" disabled={isRegistering} />
+                    </label>
+                    <label>
+                      <span className="onboarding-field-label">Last name</span>
+                      <input name="lastname" required placeholder="Last name" disabled={isRegistering} />
+                    </label>
+                  </div>
 
                   <div className="onboarding-grid-two">
                     <label>
                       <span className="onboarding-field-label">Age</span>
-                      <input name="age" type="number" min={1} required placeholder="Age" />
+                      <input name="age" type="number" min={1} required placeholder="Age" disabled={isRegistering} />
                     </label>
                     <label>
-                      <span className="onboarding-field-label">Condition</span>
-                      <select name="condition" required defaultValue="">
-                        <option value="" disabled>Select condition</option>
-                        <option value="hypertension">Hypertension</option>
-                        <option value="diabetes">Diabetes</option>
-                        <option value="both">Hypertension and Diabetes</option>
+                      <span className="onboarding-field-label">Date of birth</span>
+                      <input name="dateOfBirth" type="date" required disabled={isRegistering} />
+                    </label>
+                  </div>
+
+                  <div className="onboarding-grid-two">
+                    <label>
+                      <span className="onboarding-field-label">Gender</span>
+                      <select name="gender" required defaultValue="" disabled={isRegistering}>
+                        <option value="" disabled>Select gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
                       </select>
                     </label>
-                  </div>
-
-                  <div className="onboarding-grid-two">
                     <label>
                       <span className="onboarding-field-label">Phone number</span>
-                      <input
-                        name="phone"
-                        type="tel"
-                        placeholder="+233XXXXXXXXX"
-                        inputMode="tel"
-                        pattern="\+233[0-9]{9}"
-                        title="Use the format +233XXXXXXXXX"
-                      />
-                    </label>
-                    <label>
-                      <span className="onboarding-field-label">Ghana Card</span>
-                      <input name="ghanaCard" placeholder="GHA-XXXXXXX-0000" />
+                      <input name="phoneNumber" type="tel" required placeholder="+2335544123" inputMode="tel" pattern="\+233[0-9]{7,9}" title="Use a Ghana number beginning with +233" disabled={isRegistering} />
                     </label>
                   </div>
 
                   <div className="onboarding-grid-two">
                     <label>
-                      <span className="onboarding-field-label">NHIS</span>
-                      <input name="nhis" placeholder="XXXX-XXXX-XX" />
+                      <span className="onboarding-field-label">Ghana Card number</span>
+                      <input name="ghanaCardNumber" required placeholder="GHA-123456789-0" disabled={isRegistering} />
                     </label>
                     <label>
-                      <span className="onboarding-field-label">Facility</span>
-                      <input name="facility" placeholder="Kumasi South Hospital" />
+                      <span className="onboarding-field-label">NHIS number</span>
+                      <input name="nhisNumber" required placeholder="NHIS-123456789" disabled={isRegistering} />
                     </label>
                   </div>
 
+                  <label>
+                    <span className="onboarding-field-label">Chronic condition</span>
+                    <select name="chronicConditions" required defaultValue="" disabled={isRegistering}>
+                      <option value="" disabled>Select condition</option>
+                      <option value="hypertension">Hypertension</option>
+                      <option value="diabetes">Diabetes</option>
+                      <option value="both">Hypertension and diabetes</option>
+                    </select>
+                  </label>
+
                   <div className="modal-actions">
-                    <button type="button" className="ghost small" onClick={() => setShowRegisterModal(false)}>Cancel</button>
-                    <button type="submit" className="primary small">Register patient</button>
+                    <button type="button" className="ghost small" onClick={() => setShowRegisterModal(false)} disabled={isRegistering}>Cancel</button>
+                    <button type="submit" className="primary small" disabled={isRegistering}>{isRegistering ? 'Adding...' : 'Add patient'}</button>
                   </div>
                 </form>
               </aside>

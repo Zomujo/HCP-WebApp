@@ -7,6 +7,16 @@ import { Sidebar } from '../../components/Sidebar';
 import { hcpPatientApi } from '../../lib/api';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import type { Patient, Appointment, Medication } from '../../lib/api';
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 const tabs = ['Overview', 'Readings', 'Medication', 'Appointments', 'Chat'] as const;
 type TabName = (typeof tabs)[number];
@@ -104,6 +114,31 @@ function getBloodPressureSeverity(reading?: BloodPressureReading): string {
   return 'NORMAL';
 }
 
+function formatChartLabel(value: string, index: number): string {
+  if (!value) return `Reading ${index + 1}`;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? `Reading ${index + 1}`
+    : parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function ChartTooltip({ active, payload, label, unit }: any) {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="clinical-chart-tooltip">
+      <p>{label}</p>
+      {payload.map((entry: any) => (
+        <div key={entry.dataKey}>
+          <span style={{ backgroundColor: entry.color }} />
+          <strong>{entry.name}</strong>
+          <b>{entry.value} {unit}</b>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PatientDetailsPage() {
   const params = useParams<{ id: string }>();
   const patientId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -114,8 +149,6 @@ export default function PatientDetailsPage() {
   const [vitals, setVitals] = useState<any[]>([]);
   const [bloodPressureReadings, setBloodPressureReadings] = useState<BloodPressureReading[]>([]);
   const [bloodSugarReadings, setBloodSugarReadings] = useState<BloodSugarReading[]>([]);
-  const [hoveredBloodPressureIndex, setHoveredBloodPressureIndex] = useState<number | null>(null);
-  const [hoveredBloodSugarIndex, setHoveredBloodSugarIndex] = useState<number | null>(null);
   const [latestBloodPressureReading, setLatestBloodPressureReading] = useState<BloodPressureReading | undefined>();
   const [latestBloodSugarReading, setLatestBloodSugarReading] = useState<BloodSugarReading | undefined>();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -424,19 +457,22 @@ export default function PatientDetailsPage() {
   const upcoming = filteredAppointments.filter((a) => a.status === 'scheduled' || a.status === 'active' || a.status === 'rescheduled');
   const past = filteredAppointments.filter((a) => a.status === 'completed' || a.status === 'cancelled');
   const chartReadings = bloodPressureReadings;
-  const chartMax = Math.max(180, ...chartReadings.map((reading) => reading.systolic + 20));
-  const chartY = (value: number) => 205 - (value / chartMax) * 170;
   const latestBloodPressure = latestBloodPressureReading;
   const currentBloodPressure = latestBloodPressure
     ? `${latestBloodPressure.systolic} / ${latestBloodPressure.diastolic}`
     : 'No reading recorded';
   
   const bloodSugarChartReadings = bloodSugarReadings;
-  const bloodSugarChartMax = Math.max(200, ...bloodSugarChartReadings.map((reading) => reading.value + 20));
-  const bloodSugarChartY = (value: number) => 205 - (value / bloodSugarChartMax) * 170;
   const currentBloodSugar = latestBloodSugarReading?.value;
-  const hoveredBloodPressure = hoveredBloodPressureIndex === null ? undefined : chartReadings[hoveredBloodPressureIndex];
-  const hoveredBloodSugar = hoveredBloodSugarIndex === null ? undefined : bloodSugarChartReadings[hoveredBloodSugarIndex];
+  const bloodPressureChartData = chartReadings.map((reading, index) => ({
+    name: formatChartLabel(reading.recordedAt, index),
+    systolic: reading.systolic,
+    diastolic: reading.diastolic,
+  }));
+  const bloodSugarChartData = bloodSugarChartReadings.map((reading, index) => ({
+    name: formatChartLabel(reading.recordedAt, index),
+    glucose: reading.value,
+  }));
 
   return (
     <ProtectedRoute requiredRole="health-worker">
@@ -689,92 +725,22 @@ export default function PatientDetailsPage() {
 
                 <div className="readings-chart-box">
                   <div className="readings-chart-inner">
-                    <svg viewBox="0 0 720 250" width="100%" height="100%" preserveAspectRatio="none">
-                      {Array.from({ length: 6 }).map((_, index) => (
-                        <line key={`h-${index}`} x1="60" y1={30 + index * 35} x2="680" y2={30 + index * 35} className="chart-grid-line" />
-                      ))}
-                      {Array.from({ length: 12 }).map((_, index) => (
-                        <line key={`v-${index}`} x1={60 + index * 56} y1="30" x2={60 + index * 56} y2="205" className="chart-grid-line" />
-                      ))}
-
-                      <text x="8" y="118" className="chart-axis-text">mmHg</text>
-
-                      <polyline
-                        className="chart-line-systolic"
-                        points={chartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, chartReadings.length - 1)},${chartY(reading.systolic)}`).join(' ')}
-                      />
-                      <polyline
-                        className="chart-line-diastolic"
-                        points={chartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, chartReadings.length - 1)},${chartY(reading.diastolic)}`).join(' ')}
-                      />
-                      {chartReadings.map((reading, index) => (
-                        <circle
-                          key={`s-${reading.recordedAt}-${index}`}
-                          className="chart-dot-systolic"
-                          cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
-                          cy={chartY(reading.systolic)}
-                          r="4"
-                          tabIndex={0}
-                          onMouseEnter={() => setHoveredBloodPressureIndex(index)}
-                          onMouseLeave={() => setHoveredBloodPressureIndex(null)}
-                          onFocus={() => setHoveredBloodPressureIndex(index)}
-                          onBlur={() => setHoveredBloodPressureIndex(null)}
-                        />
-                      ))}
-                      {chartReadings.map((reading, index) => (
-                        <circle
-                          key={`d-${reading.recordedAt}-${index}`}
-                          className="chart-dot-diastolic"
-                          cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
-                          cy={chartY(reading.diastolic)}
-                          r="4"
-                          tabIndex={0}
-                          onMouseEnter={() => setHoveredBloodPressureIndex(index)}
-                          onMouseLeave={() => setHoveredBloodPressureIndex(null)}
-                          onFocus={() => setHoveredBloodPressureIndex(index)}
-                          onBlur={() => setHoveredBloodPressureIndex(null)}
-                        />
-                      ))}
-                      
-                      {hoveredBloodPressure && hoveredBloodPressureIndex !== null && (
-                        <g>
-                          <rect
-                            x={60 + (hoveredBloodPressureIndex * 620) / Math.max(1, chartReadings.length - 1) - 40}
-                            y={chartY(hoveredBloodPressure.systolic) - 50}
-                            width="80"
-                            height="50"
-                            fill="#2c3e50"
-                            rx="4"
-                          />
-                          <text
-                            x={60 + (hoveredBloodPressureIndex * 620) / Math.max(1, chartReadings.length - 1)}
-                            y={chartY(hoveredBloodPressure.systolic) - 25}
-                            textAnchor="middle"
-                            fill="white"
-                            fontSize="14"
-                            fontWeight="600"
-                          >
-                            {hoveredBloodPressure.systolic}
-                          </text>
-                          <text
-                            x={60 + (hoveredBloodPressureIndex * 620) / Math.max(1, chartReadings.length - 1)}
-                            y={chartY(hoveredBloodPressure.systolic) - 10}
-                            textAnchor="middle"
-                            fill="white"
-                            fontSize="14"
-                            fontWeight="600"
-                          >
-                            {hoveredBloodPressure.diastolic}
-                          </text>
-                        </g>
-                      )}
-                    </svg>
+                    {bloodPressureChartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={bloodPressureChartData} margin={{ top: 12, right: 18, left: 0, bottom: 4 }}>
+                          <CartesianGrid stroke="#e7edf4" strokeDasharray="3 5" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} />
+                          <YAxis tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} width={34} />
+                          <Tooltip content={<ChartTooltip unit="mmHg" />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
+                          <Legend verticalAlign="top" align="right" height={30} iconType="circle" />
+                          <Line type="monotone" dataKey="systolic" name="Systolic" stroke="#ee9342" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 7, strokeWidth: 3 }} />
+                          <Line type="monotone" dataKey="diastolic" name="Diastolic" stroke="#425876" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 7, strokeWidth: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="chart-empty-state">No blood pressure readings available.</div>
+                    )}
                   </div>
-                </div>
-
-                <div className="readings-legend-row">
-                  <span className="readings-legend-item"><span className="legend-dot systolic" /> Systolic</span>
-                  <span className="readings-legend-item"><span className="legend-dot diastolic" /> Diastolic</span>
                 </div>
               </div>
 
@@ -792,63 +758,21 @@ export default function PatientDetailsPage() {
 
                 <div className="readings-chart-box">
                   <div className="readings-chart-inner">
-                    <svg viewBox="0 0 720 250" width="100%" height="100%" preserveAspectRatio="none">
-                      {Array.from({ length: 6 }).map((_, index) => (
-                        <line key={`h-${index}`} x1="60" y1={30 + index * 35} x2="680" y2={30 + index * 35} className="chart-grid-line" />
-                      ))}
-                      {Array.from({ length: 12 }).map((_, index) => (
-                        <line key={`v-${index}`} x1={60 + index * 56} y1="30" x2={60 + index * 56} y2="205" className="chart-grid-line" />
-                      ))}
-
-                      <text x="8" y="118" className="chart-axis-text">mmol/L</text>
-
-                      <polyline
-                        className="chart-line-systolic"
-                        points={bloodSugarChartReadings.map((reading, index) => `${60 + (index * 620) / Math.max(1, bloodSugarChartReadings.length - 1)},${bloodSugarChartY(reading.value)}`).join(' ')}
-                      />
-                      {bloodSugarChartReadings.map((reading, index) => (
-                        <circle
-                          key={`bs-${reading.recordedAt}-${index}`}
-                          className="chart-dot-systolic"
-                          cx={60 + (index * 620) / Math.max(1, bloodSugarChartReadings.length - 1)}
-                          cy={bloodSugarChartY(reading.value)}
-                          r="4"
-                          tabIndex={0}
-                          onMouseEnter={() => setHoveredBloodSugarIndex(index)}
-                          onMouseLeave={() => setHoveredBloodSugarIndex(null)}
-                          onFocus={() => setHoveredBloodSugarIndex(index)}
-                          onBlur={() => setHoveredBloodSugarIndex(null)}
-                        />
-                      ))}
-
-                      {hoveredBloodSugar && hoveredBloodSugarIndex !== null && (
-                        <g>
-                          <rect
-                            x={60 + (hoveredBloodSugarIndex * 620) / Math.max(1, bloodSugarChartReadings.length - 1) - 35}
-                            y={bloodSugarChartY(hoveredBloodSugar.value) - 40}
-                            width="70"
-                            height="40"
-                            fill="#2c3e50"
-                            rx="4"
-                          />
-                          <text
-                            x={60 + (hoveredBloodSugarIndex * 620) / Math.max(1, bloodSugarChartReadings.length - 1)}
-                            y={bloodSugarChartY(hoveredBloodSugar.value) - 15}
-                            textAnchor="middle"
-                            fill="white"
-                            fontSize="14"
-                            fontWeight="600"
-                          >
-                            {hoveredBloodSugar.value}
-                          </text>
-                        </g>
-                      )}
-                    </svg>
+                    {bloodSugarChartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={bloodSugarChartData} margin={{ top: 12, right: 18, left: 0, bottom: 4 }}>
+                          <CartesianGrid stroke="#e7edf4" strokeDasharray="3 5" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} />
+                          <YAxis tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} width={34} />
+                          <Tooltip content={<ChartTooltip unit="mmol/L" />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
+                          <Legend verticalAlign="top" align="right" height={30} iconType="circle" />
+                          <Line type="monotone" dataKey="glucose" name="Blood glucose" stroke="#ee9342" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 7, strokeWidth: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="chart-empty-state">No blood glucose readings available.</div>
+                    )}
                   </div>
-                </div>
-
-                <div className="readings-legend-row">
-                  <span className="readings-legend-item"><span className="legend-dot systolic" /> Blood Glucose</span>
                 </div>
               </div>
 

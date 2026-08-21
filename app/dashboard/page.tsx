@@ -30,7 +30,6 @@ function startOfWeek(date: Date): Date {
 }
 
 function buildWeeklyCheckInData(lastCheckInDates: string[]): Appointment[] {
-  const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const counts = new Array(7).fill(0);
   const weekStart = startOfWeek(new Date());
   const weekEnd = new Date(weekStart);
@@ -48,12 +47,17 @@ function buildWeeklyCheckInData(lastCheckInDates: string[]): Appointment[] {
 
   const todayIndex = (new Date().getDay() + 6) % 7;
 
-  return labels.map((day, index) => ({
-    day,
-    value: counts[index],
-    note: counts[index] === 1 ? '1 check-in' : `${counts[index]} check-ins`,
+  return counts.map((value, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+
+    return {
+    day: date.toLocaleDateString(undefined, { weekday: 'short' }),
+    value,
+    note: `${value} ${value === 1 ? 'check-in' : 'check-ins'}`,
     active: index === todayIndex,
-  }));
+    };
+  });
 }
 
 export default function DashboardPage() {
@@ -90,11 +94,24 @@ export default function DashboardPage() {
           throw new Error('Patients data is not in the correct format');
         }
 
+        let locallyCreatedPatients: any[] = [];
+        try {
+          const stored = JSON.parse(localStorage.getItem(`hcp-created-patients:${facilityId}`) || '[]');
+          locallyCreatedPatients = Array.isArray(stored) ? stored.filter((patient) => patient?.id) : [];
+        } catch {
+          locallyCreatedPatients = [];
+        }
+
+        const allPatients = [
+          ...locallyCreatedPatients,
+          ...patients.filter((patient) => !locallyCreatedPatients.some((localPatient) => localPatient.id === patient.id)),
+        ];
+
         // Calculate stats
-        const totalPatients = patients.length;
-        const criticalCount = patients.filter((patient) => (patient.criticalReadingsCount || 0) > 0 || patient.status === 'Critical').length;
+        const totalPatients = allPatients.length;
+        const criticalCount = allPatients.filter((patient) => (patient.criticalReadingsCount || 0) > 0 || patient.status === 'Critical').length;
         const weeklyCheckIns = buildWeeklyCheckInData(
-          patients
+          allPatients
             .map((patient) => patient.lastCheckInAt)
             .filter((value): value is string => typeof value === 'string' && value.length > 0)
         );
@@ -105,7 +122,7 @@ export default function DashboardPage() {
         ]);
 
         // Set recent readings (first 3 patients with critical/caution status)
-        const critical = patients
+        const critical = allPatients
           .filter((patient) => (patient.criticalReadingsCount || 0) > 0 || patient.status === 'Critical')
           .slice(0, 3);
         setRecentReadings(critical);
@@ -190,7 +207,7 @@ export default function DashboardPage() {
               <section className="panel hcp-panel" style={{ marginTop: 18 }}>
                 <div className="panel-headline-row" style={{ marginBottom: 10 }}>
                   <p className="panel-title">Recent Critical Readings</p>
-                  <Link href="/patients" className="text-link">See All Patients</Link>
+                  <Link href="/patients" className="text-link">See All Critical Readings</Link>
                 </div>
 
                 <table className="table hcp-table dashboard-readings-table">

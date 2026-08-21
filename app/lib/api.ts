@@ -214,7 +214,7 @@ function mapPatient(raw: any): Patient {
       : adherenceRate || undefined;
 
   return {
-    id: raw.id,
+    id: String(raw.id || raw._id || raw.patientId || ''),
     firstName,
     lastName,
     name,
@@ -346,12 +346,26 @@ function extractArray<T>(data: any): T[] {
 async function parseErrorMessage(response: Response): Promise<string> {
   try {
     const body = await response.json();
-    if (typeof body?.message === 'string' && body.message.trim()) {
-      return body.message;
-    }
-    if (typeof body?.error === 'string' && body.error.trim()) {
-      return body.error;
-    }
+    const messages: string[] = [];
+    const collect = (value: unknown) => {
+      if (typeof value === 'string' && value.trim()) {
+        messages.push(value.trim());
+      } else if (Array.isArray(value)) {
+        value.forEach(collect);
+      } else if (value && typeof value === 'object') {
+        Object.entries(value).forEach(([key, nestedValue]) => {
+          if (typeof nestedValue === 'string') messages.push(`${key}: ${nestedValue}`);
+          else collect(nestedValue);
+        });
+      }
+    };
+
+    collect(body?.message);
+    collect(body?.error);
+    collect(body?.errors);
+
+    const uniqueMessages = [...new Set(messages)];
+    if (uniqueMessages.length > 0) return uniqueMessages.join(': ');
   } catch {
     // ignore parse failures
   }
@@ -651,6 +665,27 @@ export const authApi = {
 
 // HCP Patient APIs
 export const hcpPatientApi = {
+  createPatient: async (data: {
+    ghanaCardNumber: string;
+    nhisNumber: string;
+    phoneNumber: string;
+    dateOfBirth: string;
+    gender: 'male' | 'female' | 'other';
+    chronicConditions: string[];
+    firstname: string;
+    lastname: string;
+    age: number;
+    facilityId: string;
+  }): Promise<string> => {
+    const response = await apiCall<ApiResponse<string | { id?: string; _id?: string }>>(
+      '/api/v1/hcp/patients',
+      'POST',
+      data
+    );
+    if (typeof response.data === 'string') return response.data;
+    return response.data?.id || response.data?._id || '';
+  },
+
   getPatients: async (page = 1, limit = 50): Promise<Patient[]> => {
     const response = await apiCall<ApiResponse<any>>(
       `/api/v1/hcp/patients?page=${page}&pageSize=${limit}`,
