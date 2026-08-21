@@ -109,8 +109,14 @@ export function Sidebar() {
           onClick={() => setIsMobileMenuOpen((previous) => !previous)}
           aria-expanded={isMobileMenuOpen}
           aria-controls="sidebar-mobile-collapsible"
+          aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
         >
-          {isMobileMenuOpen ? 'Close' : 'Menu'}
+          <span className="hamburger-icon" aria-hidden>
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className="hamburger-label">{isMobileMenuOpen ? 'Close' : 'Menu'}</span>
         </button>
       </div>
 
@@ -125,7 +131,7 @@ export function Sidebar() {
                 {item.label}
               </div>
             ) : (
-              <Link key={item.href} href={item.href} className={`nav-link ${pathname === item.href ? 'active' : ''}`}>
+              <Link key={item.href} href={item.href} className={`nav-link ${pathname === item.href ? 'active' : ''}`} onClick={() => setIsMobileMenuOpen(false)}>
                 <span className="nav-icon" aria-hidden>
                   <NavIcon name={item.icon} />
                 </span>
