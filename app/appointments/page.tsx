@@ -1,13 +1,16 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { useAuth } from '../lib/AuthContext';
 import { hcpPatientApi } from '../lib/api';
 import type { Appointment } from '../lib/api';
 
-export default function AppointmentsPage() {
+function AppointmentsContent() {
+  const searchParams = useSearchParams();
+  const preselectedPatientId = searchParams.get('patientId') || '';
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,6 +76,12 @@ export default function AppointmentsPage() {
 
     loadData();
   }, [user?.facilityId, user?.facility?.id, timeFilter]);
+
+  useEffect(() => {
+    if (preselectedPatientId && !isLoading && patients.some((patient) => patient.id === preselectedPatientId)) {
+      setShowModal(true);
+    }
+  }, [isLoading, patients, preselectedPatientId]);
 
   const filteredAppointments = appointments.filter((appt) => {
     const query = searchQuery.trim().toLowerCase();
@@ -246,7 +255,7 @@ export default function AppointmentsPage() {
                 <form onSubmit={handleCreateAppointment}>
                   <label>
                     <span className="onboarding-field-label">Patient</span>
-                    <select name="patientId" required disabled={isSubmitting}>
+                    <select name="patientId" required disabled={isSubmitting} defaultValue={preselectedPatientId}>
                       <option value="">Search patient by name</option>
                       {patients.map((patient) => (
                         <option key={patient.id} value={patient.id}>
@@ -283,5 +292,13 @@ export default function AppointmentsPage() {
         </main>
       </div>
     </ProtectedRoute>
+  );
+}
+
+export default function AppointmentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AppointmentsContent />
+    </Suspense>
   );
 }

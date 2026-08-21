@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Sidebar } from '../../components/Sidebar';
@@ -10,6 +10,7 @@ import type { Patient, Appointment, Medication } from '../../lib/api';
 
 const tabs = ['Overview', 'Readings', 'Medication', 'Appointments', 'Chat'] as const;
 type TabName = (typeof tabs)[number];
+type AppointmentStatusFilter = 'all' | Appointment['status'];
 
 interface BloodPressureReading {
   recordedAt: string;
@@ -113,13 +114,17 @@ export default function PatientDetailsPage() {
   const [vitals, setVitals] = useState<any[]>([]);
   const [bloodPressureReadings, setBloodPressureReadings] = useState<BloodPressureReading[]>([]);
   const [bloodSugarReadings, setBloodSugarReadings] = useState<BloodSugarReading[]>([]);
+  const [hoveredBloodPressureIndex, setHoveredBloodPressureIndex] = useState<number | null>(null);
+  const [hoveredBloodSugarIndex, setHoveredBloodSugarIndex] = useState<number | null>(null);
   const [latestBloodPressureReading, setLatestBloodPressureReading] = useState<BloodPressureReading | undefined>();
   const [latestBloodSugarReading, setLatestBloodSugarReading] = useState<BloodSugarReading | undefined>();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [messageText, setMessageText] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [noteDraft, setNoteDraft] = useState('');
+  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<AppointmentStatusFilter>('all');
+  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [isSavingAppointment, setIsSavingAppointment] = useState(false);
   const [readingComment, setReadingComment] = useState('');
   const [bloodSugarComment, setBloodSugarComment] = useState('');
   const [vitalForm, setVitalForm] = useState({
@@ -192,6 +197,40 @@ export default function PatientDetailsPage() {
       setError(err instanceof Error ? err.message : 'Failed to cancel appointment');
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const handleCreateAppointment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    try {
+      setIsSavingAppointment(true);
+      setError('');
+
+      const formData = new FormData(form);
+      const date = String(formData.get('date') || '');
+      const time = String(formData.get('time') || '');
+      const title = String(formData.get('title') || '').trim();
+      const notes = String(formData.get('notes') || '').trim();
+
+      if (!date || !time || !title) {
+        setError('Please complete the appointment details.');
+        return;
+      }
+
+      await hcpPatientApi.createAppointment(patientId, {
+        title,
+        description: notes,
+        appointmentDate: new Date(`${date}T${time}`).toISOString(),
+      });
+
+      setAppointments(await hcpPatientApi.getPatientAppointments(patientId));
+      setIsAppointmentModalOpen(false);
+      form.reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create appointment');
+    } finally {
+      setIsSavingAppointment(false);
     }
   };
 
@@ -379,8 +418,11 @@ export default function PatientDetailsPage() {
     return (first + last).toUpperCase();
   };
 
-  const upcoming = appointments.filter((a) => a.status === 'scheduled' || a.status === 'active');
-  const past = appointments.filter((a) => a.status === 'completed' || a.status === 'cancelled');
+  const filteredAppointments = appointmentStatusFilter === 'all'
+    ? appointments
+    : appointments.filter((appointment) => appointment.status === appointmentStatusFilter);
+  const upcoming = filteredAppointments.filter((a) => a.status === 'scheduled' || a.status === 'active' || a.status === 'rescheduled');
+  const past = filteredAppointments.filter((a) => a.status === 'completed' || a.status === 'cancelled');
   const chartReadings = bloodPressureReadings;
   const chartMax = Math.max(180, ...chartReadings.map((reading) => reading.systolic + 20));
   const chartY = (value: number) => 205 - (value / chartMax) * 170;
@@ -393,6 +435,8 @@ export default function PatientDetailsPage() {
   const bloodSugarChartMax = Math.max(200, ...bloodSugarChartReadings.map((reading) => reading.value + 20));
   const bloodSugarChartY = (value: number) => 205 - (value / bloodSugarChartMax) * 170;
   const currentBloodSugar = latestBloodSugarReading?.value;
+  const hoveredBloodPressure = hoveredBloodPressureIndex === null ? undefined : chartReadings[hoveredBloodPressureIndex];
+  const hoveredBloodSugar = hoveredBloodSugarIndex === null ? undefined : bloodSugarChartReadings[hoveredBloodSugarIndex];
 
   return (
     <ProtectedRoute requiredRole="health-worker">
@@ -620,9 +664,14 @@ export default function PatientDetailsPage() {
                   <span>mmol/L · latest reading</span>
                 </div>
                 <div className="reading-summary-card">
-                  <span className="reading-summary-label">Recorded readings</span>
+                  <span className="reading-summary-label">Blood pressure history</span>
                   <strong>{chartReadings.length}</strong>
                   <span>blood pressure entries</span>
+                </div>
+                <div className="reading-summary-card">
+                  <span className="reading-summary-label">Blood glucose history</span>
+                  <strong>{bloodSugarReadings.length}</strong>
+                  <span>blood glucose entries</span>
                 </div>
               </div>
 
@@ -665,6 +714,11 @@ export default function PatientDetailsPage() {
                           cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
                           cy={chartY(reading.systolic)}
                           r="4"
+                          tabIndex={0}
+                          onMouseEnter={() => setHoveredBloodPressureIndex(index)}
+                          onMouseLeave={() => setHoveredBloodPressureIndex(null)}
+                          onFocus={() => setHoveredBloodPressureIndex(index)}
+                          onBlur={() => setHoveredBloodPressureIndex(null)}
                         />
                       ))}
                       {chartReadings.map((reading, index) => (
@@ -674,39 +728,43 @@ export default function PatientDetailsPage() {
                           cx={60 + (index * 620) / Math.max(1, chartReadings.length - 1)}
                           cy={chartY(reading.diastolic)}
                           r="4"
+                          tabIndex={0}
+                          onMouseEnter={() => setHoveredBloodPressureIndex(index)}
+                          onMouseLeave={() => setHoveredBloodPressureIndex(null)}
+                          onFocus={() => setHoveredBloodPressureIndex(index)}
+                          onBlur={() => setHoveredBloodPressureIndex(null)}
                         />
                       ))}
                       
-                      {/* Latest value tooltip for BP */}
-                      {chartReadings.length > 0 && latestBloodPressure && (
+                      {hoveredBloodPressure && hoveredBloodPressureIndex !== null && (
                         <g>
                           <rect
-                            x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1) - 40}
-                            y={chartY(latestBloodPressure.systolic) - 50}
+                            x={60 + (hoveredBloodPressureIndex * 620) / Math.max(1, chartReadings.length - 1) - 40}
+                            y={chartY(hoveredBloodPressure.systolic) - 50}
                             width="80"
                             height="50"
                             fill="#2c3e50"
                             rx="4"
                           />
                           <text
-                            x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1)}
-                            y={chartY(latestBloodPressure.systolic) - 25}
+                            x={60 + (hoveredBloodPressureIndex * 620) / Math.max(1, chartReadings.length - 1)}
+                            y={chartY(hoveredBloodPressure.systolic) - 25}
                             textAnchor="middle"
                             fill="white"
                             fontSize="14"
                             fontWeight="600"
                           >
-                            {latestBloodPressure.systolic}
+                            {hoveredBloodPressure.systolic}
                           </text>
                           <text
-                            x={60 + ((chartReadings.length - 1) * 620) / Math.max(1, chartReadings.length - 1)}
-                            y={chartY(latestBloodPressure.systolic) - 10}
+                            x={60 + (hoveredBloodPressureIndex * 620) / Math.max(1, chartReadings.length - 1)}
+                            y={chartY(hoveredBloodPressure.systolic) - 10}
                             textAnchor="middle"
                             fill="white"
                             fontSize="14"
                             fontWeight="600"
                           >
-                            {latestBloodPressure.diastolic}
+                            {hoveredBloodPressure.diastolic}
                           </text>
                         </g>
                       )}
@@ -755,29 +813,33 @@ export default function PatientDetailsPage() {
                           cx={60 + (index * 620) / Math.max(1, bloodSugarChartReadings.length - 1)}
                           cy={bloodSugarChartY(reading.value)}
                           r="4"
+                          tabIndex={0}
+                          onMouseEnter={() => setHoveredBloodSugarIndex(index)}
+                          onMouseLeave={() => setHoveredBloodSugarIndex(null)}
+                          onFocus={() => setHoveredBloodSugarIndex(index)}
+                          onBlur={() => setHoveredBloodSugarIndex(null)}
                         />
                       ))}
 
-                      {/* Latest value tooltip for Blood Sugar */}
-                      {bloodSugarChartReadings.length > 0 && latestBloodSugarReading && (
+                      {hoveredBloodSugar && hoveredBloodSugarIndex !== null && (
                         <g>
                           <rect
-                            x={60 + ((bloodSugarChartReadings.length - 1) * 620) / Math.max(1, bloodSugarChartReadings.length - 1) - 35}
-                            y={bloodSugarChartY(latestBloodSugarReading.value) - 40}
+                            x={60 + (hoveredBloodSugarIndex * 620) / Math.max(1, bloodSugarChartReadings.length - 1) - 35}
+                            y={bloodSugarChartY(hoveredBloodSugar.value) - 40}
                             width="70"
                             height="40"
                             fill="#2c3e50"
                             rx="4"
                           />
                           <text
-                            x={60 + ((bloodSugarChartReadings.length - 1) * 620) / Math.max(1, bloodSugarChartReadings.length - 1)}
-                            y={bloodSugarChartY(latestBloodSugarReading.value) - 15}
+                            x={60 + (hoveredBloodSugarIndex * 620) / Math.max(1, bloodSugarChartReadings.length - 1)}
+                            y={bloodSugarChartY(hoveredBloodSugar.value) - 15}
                             textAnchor="middle"
                             fill="white"
                             fontSize="14"
                             fontWeight="600"
                           >
-                            {latestBloodSugarReading.value}
+                            {hoveredBloodSugar.value}
                           </text>
                         </g>
                       )}
@@ -941,23 +1003,19 @@ export default function PatientDetailsPage() {
               <div className="panel hcp-panel">
                 <div className="panel-headline-row" style={{ marginBottom: 10 }}>
                   <p className="panel-title">30-day adherence</p>
-                  <p className="text-muted" style={{ margin: 0 }}><strong style={{ color: '#f2994a' }}>{patient.adherence || 'N/A'}</strong> overall</p>
+                  {patient.adherence && (
+                    <p className="text-muted" style={{ margin: 0 }}>
+                      <strong style={{ color: '#f2994a' }}>{patient.adherence}</strong> overall
+                    </p>
+                  )}
                 </div>
 
-                <p className="text-muted">No medication adherence data recorded.</p>
+                {patient.adherence ? (
+                  <p className="text-muted">Adherence data is available for this patient.</p>
+                ) : (
+                  <p className="text-muted">No adherence record available.</p>
+                )}
 
-                <label style={{ marginTop: 16, display: 'block' }}>
-                  <span className="block-label">Note to patient about adherence</span>
-                  <textarea
-                    placeholder="Write a short, warm note in plain language..."
-                    value={noteDraft}
-                    onChange={(event) => setNoteDraft(event.target.value)}
-                  />
-                </label>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-                  <button type="button" className="primary small">Send & notify patient</button>
-                </div>
               </div>
 
               <div className="panel hcp-panel">
@@ -966,12 +1024,16 @@ export default function PatientDetailsPage() {
                   medications.slice(0, 2).map((med) => (
                     <div key={med.id} className="prescription-card">
                       <p style={{ margin: 0, fontWeight: 700 }}>{med.name}</p>
-                      <p className="text-muted" style={{ margin: '4px 0 0' }}>
-                        {[med.dose, med.frequency].filter(Boolean).join(' • ') || '1 tablet, every morning'}
-                      </p>
-                      <p style={{ margin: '6px 0 0', color: '#ef6b6b', fontWeight: 700, fontSize: '0.82rem' }}>
-                        Adherence {med.adherence || 'N/A'}
-                      </p>
+                      {(med.dose || med.frequency) && (
+                        <p className="text-muted" style={{ margin: '4px 0 0' }}>
+                          {[med.dose, med.frequency].filter(Boolean).join(' • ')}
+                        </p>
+                      )}
+                      {med.adherence && (
+                        <p style={{ margin: '6px 0 0', color: '#ef6b6b', fontWeight: 700, fontSize: '0.82rem' }}>
+                          Adherence {med.adherence}
+                        </p>
+                      )}
                     </div>
                   ))
                 ) : (
@@ -984,9 +1046,26 @@ export default function PatientDetailsPage() {
           {activeTab === 'Appointments' && (
             <section className="panel hcp-panel">
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                <Link href="/appointments" className="primary small">
-                  + New Appointment
-                </Link>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="block-label" style={{ margin: 0 }}>Status</span>
+                    <select
+                      value={appointmentStatusFilter}
+                      onChange={(event) => setAppointmentStatusFilter(event.target.value as AppointmentStatusFilter)}
+                      aria-label="Filter appointments by status"
+                    >
+                      <option value="all">All statuses</option>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="active">Active</option>
+                      <option value="rescheduled">Rescheduled</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </label>
+                  <button type="button" className="primary small" onClick={() => setIsAppointmentModalOpen(true)}>
+                    + New Appointment
+                  </button>
+                </div>
               </div>
 
               <p className="block-label" style={{ marginBottom: 8 }}>
@@ -1023,6 +1102,56 @@ export default function PatientDetailsPage() {
                   </div>
                 )}
               </div>
+
+              {isAppointmentModalOpen && (
+                <div className="modal-backdrop" onClick={() => setIsAppointmentModalOpen(false)}>
+                  <aside
+                    className="panel hcp-panel appointment-modal-preview appointment-modal-overlay"
+                    onClick={(event) => event.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Set an appointment for ${patient.firstName} ${patient.lastName}`}
+                  >
+                    <div className="modal-head-row">
+                      <div>
+                        <p className="panel-title" style={{ margin: 0 }}>Set an appointment</p>
+                        <p className="text-muted" style={{ margin: '5px 0 0' }}>
+                          {patient.firstName} {patient.lastName}
+                        </p>
+                      </div>
+                      <button type="button" className="modal-close" aria-label="Close modal" onClick={() => setIsAppointmentModalOpen(false)}>
+                        ×
+                      </button>
+                    </div>
+                    <form onSubmit={handleCreateAppointment}>
+                      <label>
+                        <span className="onboarding-field-label">Appointment title</span>
+                        <input name="title" type="text" required placeholder="e.g. Follow-up consultation" disabled={isSavingAppointment} />
+                      </label>
+                      <div className="onboarding-grid-two">
+                        <label>
+                          <span className="onboarding-field-label">Date</span>
+                          <input name="date" type="date" required disabled={isSavingAppointment} />
+                        </label>
+                        <label>
+                          <span className="onboarding-field-label">Time</span>
+                          <input name="time" type="time" required disabled={isSavingAppointment} />
+                        </label>
+                      </div>
+                      <label>
+                        <span className="onboarding-field-label">Notes for patient (optional)</span>
+                        <textarea name="notes" placeholder="Add appointment notes" disabled={isSavingAppointment} />
+                      </label>
+                      <div className="modal-actions">
+                        <button type="button" className="ghost small" onClick={() => setIsAppointmentModalOpen(false)} disabled={isSavingAppointment}>Cancel</button>
+                        <button type="submit" className="primary small" disabled={isSavingAppointment}>
+                          {isSavingAppointment ? 'Saving...' : 'Book appointment'}
+                        </button>
+                      </div>
+                    </form>
+                  </aside>
+                </div>
+              )}
 
               {past.length > 0 && (
                 <>

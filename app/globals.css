@@ -1678,6 +1678,20 @@ button.small {
   fill: #47586f;
 }
 
+.chart-dot-systolic,
+.chart-dot-diastolic {
+  cursor: pointer;
+  transition: r 0.15s ease, opacity 0.15s ease;
+}
+
+.chart-dot-systolic:hover,
+.chart-dot-systolic:focus,
+.chart-dot-diastolic:hover,
+.chart-dot-diastolic:focus {
+  opacity: 0.78;
+  outline: none;
+}
+
 .reading-card {
   border: 1px solid #e0e6ef;
   border-radius: 10px;
@@ -1803,7 +1817,7 @@ button.small {
 
 .readings-summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
