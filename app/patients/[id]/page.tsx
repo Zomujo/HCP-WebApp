@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
@@ -18,7 +18,7 @@ import {
   YAxis,
 } from 'recharts';
 
-const tabs = ['Overview', 'Readings', 'Medication', 'Appointments', 'Chat'] as const;
+const tabs = ['Overview', 'Readings', 'Medication', 'Appointments'] as const;
 type TabName = (typeof tabs)[number];
 type AppointmentStatusFilter = 'all' | Appointment['status'];
 
@@ -40,8 +40,121 @@ interface BloodSugarReading {
   value: number;
 }
 
-function mapBloodPressureLogs(logs: any[]): BloodPressureReading[] {
-  return logs
+const TIMESTAMP_KEYS = [
+  'recordedAt',
+  'recorded_at',
+  'measuredAt',
+  'measured_at',
+  'takenAt',
+  'taken_at',
+  'loggedAt',
+  'logged_at',
+  'createdAt',
+  'created_at',
+  'date',
+  'timestamp',
+];
+
+function parseTimestamp(value: unknown): Date | null {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    // Epoch values arrive in seconds from some sources and milliseconds from others.
+    const parsed = new Date(value < 1e12 ? value * 1000 : value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = new Date(value.trim());
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+}
+
+// Returns '' rather than inventing a timestamp when the payload carries none.
+function extractRecordedAt(entry: any): string {
+  if (!entry || typeof entry !== 'object') return '';
+
+  for (const key of TIMESTAMP_KEYS) {
+    const parsed = parseTimestamp(entry[key]);
+    if (parsed) return parsed.toISOString();
+  }
+
+  for (const [key, value] of Object.entries(entry)) {
+    if (!/(at|date|time)$/i.test(key)) continue;
+    const parsed = parseTimestamp(value);
+    if (parsed) return parsed.toISOString();
+  }
+
+  return '';
+}
+
+// Comparing undated readings via new Date('') yields NaN, which scrambles the order, so fall back to input order.
+function sortByRecordedAt<T extends { recordedAt: string }>(readings: T[]): T[] {
+  return readings
+    .map((reading, index) => ({ reading, index }))
+    .sort((a, b) => {
+      const aTime = parseTimestamp(a.reading.recordedAt)?.getTime();
+      const bTime = parseTimestamp(b.reading.recordedAt)?.getTime();
+      if (aTime === undefined || bTime === undefined) return a.index - b.index;
+      return aTime - bTime || a.index - b.index;
+    })
+    .map((item) => item.reading);
+}
+
+// The vital-history logs carry no timestamp, so the trends endpoint is the only dated source for BP.
+function mapBloodPressureTrends(trends: any): BloodPressureReading[] {
+  const labels: unknown[] = Array.isArray(trends?.labels) ? trends.labels : [];
+  const systolic: unknown[] = Array.isArray(trends?.systolic) ? trends.systolic : [];
+  const diastolic: unknown[] = Array.isArray(trends?.diastolic) ? trends.diastolic : [];
+
+  return labels
+    .map((label, index) => {
+      const systolicValue = Number(systolic[index]);
+      const diastolicValue = Number(diastolic[index]);
+      if (!Number.isFinite(systolicValue) || !Number.isFinite(diastolicValue)) return null;
+      const recordedAt = parseTimestamp(label);
+      return {
+        systolic: systolicValue,
+        diastolic: diastolicValue,
+        recordedAt: recordedAt ? recordedAt.toISOString() : '',
+      };
+    })
+    .filter((reading): reading is BloodPressureReading => reading !== null);
+}
+
+const NUMERIC_SERIES_KEYS = ['values', 'value', 'bloodSugar', 'glucose', 'data', 'series', 'readings'];
+
+// The single-vital trends payload names its numeric series differently per vital, so match on shape, not key.
+function mapVitalTrends(trends: any): BloodSugarReading[] {
+  const labels: unknown[] = Array.isArray(trends?.labels) ? trends.labels : [];
+  if (labels.length === 0) return [];
+
+  const isNumericSeries = (candidate: unknown): candidate is unknown[] =>
+    Array.isArray(candidate) &&
+    candidate.length === labels.length &&
+    candidate.every((item) => item !== null && item !== '' && Number.isFinite(Number(item)));
+
+  const series =
+    NUMERIC_SERIES_KEYS.map((key) => trends?.[key]).find(isNumericSeries) ??
+    Object.entries(trends ?? {})
+      .filter(([key]) => key !== 'labels')
+      .map(([, value]) => value)
+      .find(isNumericSeries);
+
+  if (!series) return [];
+
+  return labels
+    .map((label, index) => {
+      const value = Number(series[index]);
+      if (!Number.isFinite(value)) return null;
+      const recordedAt = parseTimestamp(label);
+      return { value, recordedAt: recordedAt ? recordedAt.toISOString() : '' };
+    })
+    .filter((reading): reading is BloodSugarReading => reading !== null);
+}
+
+function mapBloodPressureLogs(logs: any[]): BloodPressureReading[] {  const readings = logs
     .map((log) => {
       const bloodPressure = log.vitals?.find((vital: any) =>
         String(vital.vitalType || vital.type || '').toLowerCase().includes('bloodpressure')
@@ -50,15 +163,16 @@ function mapBloodPressureLogs(logs: any[]): BloodPressureReading[] {
       if (!parsed) return null;
       return {
         ...parsed,
-        recordedAt: log.recordedAt || log.createdAt || log.date || '',
+        recordedAt: extractRecordedAt(bloodPressure) || extractRecordedAt(log),
       };
     })
-    .filter((reading): reading is BloodPressureReading => reading !== null)
-    .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
+    .filter((reading): reading is BloodPressureReading => reading !== null);
+
+  return sortByRecordedAt(readings);
 }
 
 function mapBloodSugarLogs(logs: any[]): BloodSugarReading[] {
-  return logs
+  const readings = logs
     .map((log) => {
       const bloodSugar = log.vitals?.find((vital: any) =>
         String(vital.vitalType || vital.type || '').toLowerCase().includes('bloodsugar') ||
@@ -70,11 +184,12 @@ function mapBloodSugarLogs(logs: any[]): BloodSugarReading[] {
       if (!Number.isFinite(value)) return null;
       return {
         value,
-        recordedAt: log.recordedAt || log.createdAt || log.date || '',
+        recordedAt: extractRecordedAt(bloodSugar) || extractRecordedAt(log),
       };
     })
-    .filter((reading): reading is BloodSugarReading => reading !== null)
-    .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
+    .filter((reading): reading is BloodSugarReading => reading !== null);
+
+  return sortByRecordedAt(readings);
 }
 
 function mergeVitalEntries(logs: any[], latestVitals: any[]): any[] {
@@ -86,12 +201,22 @@ function mergeVitalEntries(logs: any[], latestVitals: any[]): any[] {
     const vitalValues = nestedVitals.length > 0
       ? nestedVitals.map((vital: any) => `${vital.vitalType || vital.type || ''}:${vital.value ?? ''}`).join('|')
       : `${entry.vitalType || entry.type || ''}:${entry.value ?? entry.bloodPressure ?? entry.bloodSugar ?? ''}`;
-    const recordedAt = entry.recordedAt || entry.createdAt || entry.date || '';
+    const recordedAt = extractRecordedAt(entry);
+    // Without a timestamp two genuinely separate visits are indistinguishable, so only dedupe dated entries.
+    if (!recordedAt) return true;
     const key = `${recordedAt}|${vitalValues}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+function isDoseTaken(record: any): boolean {
+  const entry = Array.isArray(record) ? record[0] : record;
+  if (!entry) return false;
+  if (typeof entry.taken === 'boolean') return entry.taken;
+  const status = String(entry.status ?? entry.adherenceStatus ?? '').toLowerCase();
+  return status === 'taken' || status === 'completed' || status === 'adherent';
 }
 
 function formatAppointmentDate(value?: string): string {
@@ -114,12 +239,27 @@ function getBloodPressureSeverity(reading?: BloodPressureReading): string {
   return 'NORMAL';
 }
 
-function formatChartLabel(value: string, index: number): string {
-  if (!value) return `Reading ${index + 1}`;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? `Reading ${index + 1}`
-    : parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+// Falls back to a positional label only when a reading genuinely has no timestamp.
+function buildChartLabels(readings: Array<{ recordedAt: string }>): string[] {
+  const dates = readings.map((reading) => parseTimestamp(reading.recordedAt));
+  const dayLabels = dates.map((date) =>
+    date ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null
+  );
+  const hasSameDayReadings = dayLabels.some(
+    (label, index) => label !== null && dayLabels.indexOf(label) !== index
+  );
+
+  return dates.map((date, index) => {
+    if (!date) return `Reading ${index + 1}`;
+    return hasSameDayReadings
+      ? date.toLocaleString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : dayLabels[index]!;
+  });
 }
 
 function ChartTooltip({ active, payload, label, unit }: any) {
@@ -153,6 +293,7 @@ export default function PatientDetailsPage() {
   const [latestBloodSugarReading, setLatestBloodSugarReading] = useState<BloodSugarReading | undefined>();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
+  const [adherenceData, setAdherenceData] = useState<{ date: string; taken: boolean }[]>([]);
   const [messageText, setMessageText] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<AppointmentStatusFilter>('all');
@@ -184,10 +325,12 @@ export default function PatientDetailsPage() {
         setIsLoading(true);
         setError('');
 
-        const [patientData, vitalsData, vitalLogs, appointmentsData, medicationsData] = await Promise.all([
+        const [patientData, vitalsData, vitalLogs, bpTrends, sugarTrends, appointmentsData, medicationsData] = await Promise.all([
           hcpPatientApi.getPatientById(patientId),
           hcpPatientApi.getPatientVitals(patientId).catch(() => []),
           hcpPatientApi.getPatientVitalHistoryLogs(patientId).catch(() => []),
+          hcpPatientApi.getBloodPressureTrends(patientId, 'thisMonth').catch(() => null),
+          hcpPatientApi.getVitalHistoryTrends(patientId, 'bloodSugar', 'thisMonth').catch(() => null),
           hcpPatientApi.getPatientAppointments(patientId),
           hcpPatientApi.getPatientMedications(patientId),
         ]);
@@ -201,12 +344,26 @@ export default function PatientDetailsPage() {
             ? [vitalsData]
             : [];
         const allVitalEntries = mergeVitalEntries(logsArray, latestVitalsArray);
-        setBloodPressureReadings(mapBloodPressureLogs(allVitalEntries));
-        setBloodSugarReadings(mapBloodSugarLogs(allVitalEntries));
+        const trendReadings = mapBloodPressureTrends(bpTrends);
+        setBloodPressureReadings(
+          trendReadings.length > 0 ? sortByRecordedAt(trendReadings) : mapBloodPressureLogs(allVitalEntries)
+        );
+        const sugarTrendReadings = mapVitalTrends(sugarTrends);
+        setBloodSugarReadings(
+          sugarTrendReadings.length > 0
+            ? sortByRecordedAt(sugarTrendReadings)
+            : mapBloodSugarLogs(allVitalEntries)
+        );
         setLatestBloodPressureReading(mapBloodPressureLogs(latestVitalsArray).at(-1));
         setLatestBloodSugarReading(mapBloodSugarLogs(latestVitalsArray).at(-1));
         setAppointments(appointmentsData);
         setMedications(medicationsData);
+
+        if (sugarTrends && sugarTrendReadings.length === 0) {
+          console.warn(
+            '[blood sugar trends] could not extract a dated series from: ' + JSON.stringify(sugarTrends)
+          );
+        }
       } catch (err) {
         console.error('Failed to load patient data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load patient data');
@@ -219,6 +376,41 @@ export default function PatientDetailsPage() {
       loadData();
     }
   }, [patientId]);
+
+  const primaryMedicationId = medications[0]?.id;
+
+  useEffect(() => {
+    if (!patientId || !primaryMedicationId) {
+      setAdherenceData([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    // The adherence endpoint returns one day at a time, so build the 30-day window client-side.
+    const days = Array.from({ length: 30 }, (_, index) => {
+      const day = new Date();
+      day.setDate(day.getDate() - (29 - index));
+      return day.toISOString().slice(0, 10);
+    });
+
+    Promise.all(
+      days.map(async (date) => {
+        try {
+          const record = await hcpPatientApi.getMedicationAdherence(patientId, primaryMedicationId, date);
+          return { date, taken: isDoseTaken(record) };
+        } catch {
+          return { date, taken: false };
+        }
+      })
+    ).then((results) => {
+      if (!cancelled) setAdherenceData(results);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId, primaryMedicationId]);
 
   const handleCancelAppointment = async (appointmentId: string) => {
     try {
@@ -309,6 +501,10 @@ export default function PatientDetailsPage() {
       const refreshedVitals = await hcpPatientApi.getPatientVitals(patientId).catch(() => []);
       setVitals(Array.isArray(refreshedVitals) ? refreshedVitals : []);
       const refreshedLogs = await hcpPatientApi.getPatientVitalHistoryLogs(patientId).catch(() => []);
+      const refreshedTrends = await hcpPatientApi.getBloodPressureTrends(patientId, 'thisMonth').catch(() => null);
+      const refreshedSugarTrends = await hcpPatientApi
+        .getVitalHistoryTrends(patientId, 'bloodSugar', 'thisMonth')
+        .catch(() => null);
       const logsArray = Array.isArray(refreshedLogs) ? refreshedLogs : [];
       const latestVitalsArray = Array.isArray(refreshedVitals)
         ? refreshedVitals
@@ -316,8 +512,18 @@ export default function PatientDetailsPage() {
           ? [refreshedVitals]
           : [];
       const allVitalEntries = mergeVitalEntries(logsArray, latestVitalsArray);
-      setBloodPressureReadings(mapBloodPressureLogs(allVitalEntries));
-      setBloodSugarReadings(mapBloodSugarLogs(allVitalEntries));
+      const refreshedTrendReadings = mapBloodPressureTrends(refreshedTrends);
+      const refreshedSugarTrendReadings = mapVitalTrends(refreshedSugarTrends);
+      setBloodPressureReadings(
+        refreshedTrendReadings.length > 0
+          ? sortByRecordedAt(refreshedTrendReadings)
+          : mapBloodPressureLogs(allVitalEntries)
+      );
+      setBloodSugarReadings(
+        refreshedSugarTrendReadings.length > 0
+          ? sortByRecordedAt(refreshedSugarTrendReadings)
+          : mapBloodSugarLogs(allVitalEntries)
+      );
       setLatestBloodPressureReading(mapBloodPressureLogs(latestVitalsArray).at(-1));
       setLatestBloodSugarReading(mapBloodSugarLogs(latestVitalsArray).at(-1));
     } catch (err) {
@@ -464,13 +670,15 @@ export default function PatientDetailsPage() {
   
   const bloodSugarChartReadings = bloodSugarReadings;
   const currentBloodSugar = latestBloodSugarReading?.value;
+  const bloodPressureChartLabels = buildChartLabels(chartReadings);
+  const bloodSugarChartLabels = buildChartLabels(bloodSugarChartReadings);
   const bloodPressureChartData = chartReadings.map((reading, index) => ({
-    name: formatChartLabel(reading.recordedAt, index),
+    name: bloodPressureChartLabels[index],
     systolic: reading.systolic,
     diastolic: reading.diastolic,
   }));
   const bloodSugarChartData = bloodSugarChartReadings.map((reading, index) => ({
-    name: formatChartLabel(reading.recordedAt, index),
+    name: bloodSugarChartLabels[index],
     glucose: reading.value,
   }));
 
@@ -663,8 +871,8 @@ export default function PatientDetailsPage() {
 
               <div className="panel hcp-panel">
                 <p className="panel-title">Latest vitals</p>
-                <div className="latest-vitals-box">
-                  <p className="block-label" style={{ color: '#c14d4d' }}>
+                <div className={`latest-vitals-box ${getBloodPressureSeverity(latestBloodPressure).toLowerCase().replace(' ', '-')}`}>
+                  <p className="block-label">
                     {getBloodPressureSeverity(latestBloodPressure)}
                   </p>
                   <p className="latest-vitals-value">{currentBloodPressure}</p>
@@ -925,7 +1133,7 @@ export default function PatientDetailsPage() {
           {activeTab === 'Medication' && (
             <section className="patient-overview-grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) 280px' }}>
               <div className="panel hcp-panel">
-                <div className="panel-headline-row" style={{ marginBottom: 10 }}>
+                <div className="panel-headline-row" style={{ marginBottom: 16 }}>
                   <p className="panel-title">30-day adherence</p>
                   {patient.adherence && (
                     <p className="text-muted" style={{ margin: 0 }}>
@@ -934,12 +1142,63 @@ export default function PatientDetailsPage() {
                   )}
                 </div>
 
-                {patient.adherence ? (
-                  <p className="text-muted">Adherence data is available for this patient.</p>
+                {patient.adherence && adherenceData.length > 0 ? (
+                  <>
+                    {/* Adherence Calendar Grid */}
+                    <div style={{ marginBottom: 20 }}>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(10, 1fr)',
+                          gap: 6,
+                          marginBottom: 12,
+                        }}
+                      >
+                        {adherenceData.map((day) => (
+                          <div
+                            key={day.date}
+                            style={{
+                              width: '100%',
+                              aspectRatio: '1',
+                              borderRadius: 6,
+                              backgroundColor: day.taken ? '#22c55e' : '#cbd5e1',
+                              transition: 'transform 0.2s',
+                            }}
+                            title={`${day.date}: ${day.taken ? 'Taken' : 'Missed'}`}
+                          />
+                        ))}
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, fontSize: '0.8rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div
+                            style={{
+                              width: 16,
+                              height: 16,
+                              borderRadius: 3,
+                              backgroundColor: '#22c55e',
+                            }}
+                          />
+                          <span>Taken</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div
+                            style={{
+                              width: 16,
+                              height: 16,
+                              borderRadius: 3,
+                              backgroundColor: '#cbd5e1',
+                            }}
+                          />
+                          <span>Missed</span>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : patient.adherence && primaryMedicationId ? (
+                  <p className="text-muted">Loading adherence calendar...</p>
                 ) : (
                   <p className="text-muted">No adherence record available.</p>
                 )}
-
               </div>
 
               <div className="panel hcp-panel">
@@ -1094,14 +1353,6 @@ export default function PatientDetailsPage() {
                   ))}
                 </>
               )}
-            </section>
-          )}
-
-          {activeTab === 'Chat' && (
-            <section className="panel hcp-panel patient-chat-box" style={{ display: 'grid', placeItems: 'center', minHeight: '200px' }}>
-              <div style={{ textAlign: 'center', color: '#7b8392', fontSize: '1.2rem', fontWeight: 700 }}>
-                Coming Soon
-              </div>
             </section>
           )}
         </main>

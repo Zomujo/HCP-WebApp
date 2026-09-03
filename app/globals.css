@@ -280,6 +280,7 @@ button.small {
 .status-critical { background: #fee2e2; color: #991b1b; }
 .status-silent { background: #fef3c7; color: #92400e; }
 .status-stable { background: #dcfce7; color: #166534; }
+.status-unknown { background: #eef1f6; color: #5b6676; }
 .status-caution { background: #fef9c3; color: #78350f; }
 
 .block-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #9ca3af; }
@@ -470,20 +471,6 @@ button.small {
   margin-top: 8px;
   font-size: 0.78rem;
   color: #6b7280;
-}
-
-.chat-input-row {
-  display: flex;
-  gap: 12px;
-  margin-top: 20px;
-}
-
-.chat-input-row input {
-  flex: 1;
-}
-
-.chat-input-row button {
-  width: 64px;
 }
 
 .modal-card {
@@ -1280,117 +1267,6 @@ button.small {
   margin-top: 8px;
 }
 
-.chat-layout-figma {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  padding: 0;
-  overflow: hidden;
-}
-
-.chat-thread-column {
-  border-right: 1px solid #e4e8ef;
-  padding: 10px;
-}
-
-.chat-main-column {
-  display: grid;
-  grid-template-rows: auto 1fr auto auto;
-}
-
-.chat-main-header {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid #e4e8ef;
-}
-
-.chat-thread-list {
-  display: grid;
-  gap: 2px;
-}
-
-.chat-thread-item {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 8px;
-  align-items: start;
-  border-radius: 8px;
-  padding: 8px;
-}
-
-.chat-thread-item:hover {
-  background: #f6f7fa;
-}
-
-.chat-thread-name {
-  margin: 0;
-  font-weight: 700;
-  font-size: 0.86rem;
-}
-
-.chat-thread-preview {
-  margin: 2px 0 0;
-  color: #8a93a2;
-  font-size: 0.74rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.chat-thread-time {
-  font-size: 0.68rem;
-  color: #8a93a2;
-}
-
-.chat-canvas {
-  display: grid;
-  gap: 12px;
-  padding: 12px;
-  background: #f5f7fa;
-  align-content: start;
-}
-
-.message-bubble {
-  padding: 10px 12px;
-  border-radius: 10px;
-  max-width: 56%;
-  font-size: 0.8rem;
-}
-
-.message-from {
-  background: #ffffff;
-  border: 1px solid #e2e7f0;
-}
-
-.message-to {
-  background: #45474c;
-  color: #ffffff;
-}
-
-.message-time {
-  color: #9ba4b4;
-  font-size: 0.64rem;
-}
-
-.chat-suggest-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px 10px;
-  border-top: 1px solid #e4e8ef;
-}
-
-.chat-input-row {
-  margin: 0;
-  padding: 8px 10px 10px;
-  border-top: 1px solid #e4e8ef;
-}
-
-.chat-input-row button {
-  width: 80px;
-}
-
 .profile-wrap {
   width: min(100%, 470px);
   display: grid;
@@ -1521,9 +1397,17 @@ button.small {
 .latest-vitals-box {
   margin-top: 12px;
   border-radius: 12px;
-  background: #f9d9d9;
+  background: #f1f4f8;
   padding: 14px;
 }
+
+.latest-vitals-box.normal { background: #f3fbf7; }
+.latest-vitals-box.normal .block-label { color: #277459; }
+.latest-vitals-box.warning { background: #fffaf1; }
+.latest-vitals-box.warning .block-label { color: #a66a1f; }
+.latest-vitals-box.critical { background: #f9d9d9; }
+.latest-vitals-box.critical .block-label { color: #c14d4d; }
+.latest-vitals-box.no-reading .block-label { color: #6b7280; }
 
 .latest-vitals-meta-grid {
   margin-top: 10px;
@@ -2122,12 +2006,6 @@ button.small {
   margin-top: 12px;
 }
 
-.patient-chat-box {
-  min-height: 520px;
-  display: grid;
-  grid-template-rows: 1fr auto;
-}
-
 .onboarding-page {
   background: linear-gradient(180deg, #f8f3ee 0%, #f5f4f2 100%);
   min-height: 100vh;
@@ -2558,19 +2436,6 @@ button.small {
     grid-template-columns: 1fr;
   }
 
-  .chat-layout-figma {
-    grid-template-columns: 1fr;
-  }
-
-  .chat-thread-column {
-    border-right: none;
-    border-bottom: 1px solid #e4e8ef;
-  }
-
-  .chat-main-column {
-    min-height: 440px;
-  }
-
   .message-bubble {
     max-width: 78%;
   }
@@ -2686,20 +2551,8 @@ button.small {
     align-items: stretch;
   }
 
-  .chat-suggest-row {
-    padding: 8px;
-  }
-
   .message-bubble {
     max-width: 92%;
-  }
-
-  .chat-input-row {
-    flex-direction: column;
-  }
-
-  .chat-input-row button {
-    width: 100%;
   }
 
   .profile-wrap {
@@ -2848,8 +2701,7 @@ button.small {
   .patient-overview-grid,
   .patient-kv-grid,
   .onboarding-grid-two,
-  .stats-row-figma,
-  .pharmacy-chat-layout {
+  .stats-row-figma {
     grid-template-columns: 1fr;
   }
 
@@ -3070,124 +2922,6 @@ body {
   overflow-x: hidden;
 }
 
-.pharmacy-chat-layout {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 18px;
-  margin-top: 18px;
-}
-
-.pharmacy-chat-list-panel {
-  max-height: 600px;
-  overflow-y: auto;
-}
-
-.pharmacy-chat-list-title {
-  margin-bottom: 12px;
-}
-
-.pharmacy-chat-thread-item {
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  cursor: pointer;
-  transition: background-color 0.16s ease, border-left-color 0.16s ease;
-}
-
-.pharmacy-chat-thread-item.active {
-  background-color: #f0f7ff;
-  border-left: 3px solid #0066cc;
-  padding-left: 9px;
-}
-
-.pharmacy-chat-thread-name {
-  margin: 0 0 4px;
-  font-weight: 700;
-  font-size: 14px;
-}
-
-.pharmacy-chat-thread-preview {
-  margin: 0;
-  font-size: 13px;
-  color: #666;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pharmacy-chat-thread-time {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: #999;
-}
-
-.pharmacy-chat-main-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 480px;
-}
-
-.pharmacy-chat-main-header {
-  border-bottom: 1px solid #e0e0e0;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
-}
-
-.pharmacy-chat-main-title {
-  margin: 0;
-}
-
-.pharmacy-chat-main-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin-bottom: 12px;
-}
-
-.pharmacy-chat-bubble {
-  padding: 12px;
-  border-radius: 8px;
-  margin-bottom: 8px;
-}
-
-.pharmacy-chat-bubble.from {
-  background-color: #f5f5f5;
-}
-
-.pharmacy-chat-bubble.to {
-  background-color: #e8f4f8;
-  margin-left: auto;
-  max-width: 70%;
-}
-
-.pharmacy-chat-bubble-author {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #666;
-}
-
-.pharmacy-chat-bubble-author.you {
-  color: #0066cc;
-}
-
-.pharmacy-chat-bubble-text {
-  margin: 0;
-  font-size: 14px;
-}
-
-.pharmacy-chat-input-row {
-  display: flex;
-  gap: 8px;
-}
-
-.pharmacy-chat-input-row input {
-  flex: 1;
-}
-
-.pharmacy-chat-input-row .primary {
-  white-space: nowrap;
-}
-
 @media (max-width: 1180px) {
   .hcp-page {
     width: 100%;
@@ -3229,15 +2963,6 @@ body {
     gap: 8px;
     justify-content: flex-start;
   }
-
-  .pharmacy-chat-layout {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  .pharmacy-chat-list-panel {
-    max-height: 340px;
-  }
 }
 
 @media (max-width: 640px) {
@@ -3275,18 +3000,6 @@ body {
 
   .chart-axis-text {
     font-size: 9px;
-  }
-
-  .pharmacy-chat-bubble.to {
-    max-width: 86%;
-  }
-
-  .pharmacy-chat-input-row {
-    flex-direction: column;
-  }
-
-  .pharmacy-chat-input-row .primary {
-    width: 100%;
   }
 }
 
@@ -3645,38 +3358,6 @@ a.primary.small {
   overscroll-behavior: contain;
 }
 
-.chat-layout-figma {
-  border: 1px solid #dbe2ef;
-  border-radius: 10px;
-}
-
-.chat-thread-column {
-  padding: 10px;
-}
-
-.chat-thread-item.active {
-  background: #f6f8fc;
-}
-
-.chat-canvas {
-  min-height: 360px;
-  background: #f6f8fc;
-  padding: 14px;
-}
-
-.message-bubble {
-  border-radius: 12px;
-}
-
-.message-to {
-  background: #4a4d53;
-}
-
-.chat-send-btn {
-  width: 44px;
-  padding: 10px 0;
-}
-
 .readings-action-row {
   display: flex;
   align-items: center;
@@ -3754,7 +3435,7 @@ a.primary.small {
 }
 
 .latest-vitals-box {
-  background: #ffd2d0;
+  background: #eef1f6;
 }
 
 .latest-vitals-value {
@@ -3786,7 +3467,6 @@ a.primary.small {
     grid-template-columns: 1fr;
   }
 
-  .chat-layout-figma,
   .patient-overview-grid {
     grid-template-columns: 1fr;
   }
@@ -3853,19 +3533,6 @@ body {
 .panel-headline-row .text-link,
 .panel-headline-row a {
   flex-shrink: 0;
-}
-
-.chat-thread-column,
-.chat-main-column,
-.pharmacy-chat-list-panel,
-.pharmacy-chat-main-panel {
-  min-width: 0;
-}
-
-.chat-thread-preview,
-.pharmacy-chat-thread-preview,
-.pharmacy-chat-bubble-text {
-  overflow-wrap: anywhere;
 }
 
 @media (max-width: 960px) {
@@ -3947,23 +3614,12 @@ body {
     min-width: 0;
   }
 
-  .appointment-row,
-  .pharmacy-chat-input-row {
+  .appointment-row {
     align-items: stretch;
   }
 
-  .appointment-row > *,
-  .pharmacy-chat-input-row > * {
+  .appointment-row > * {
     max-width: 100%;
-  }
-
-  .pharmacy-chat-input-row {
-    flex-direction: column;
-  }
-
-  .pharmacy-chat-input-row button,
-  .chat-input-row button {
-    width: 100%;
   }
 
   .modal-card,

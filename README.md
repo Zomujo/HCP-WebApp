@@ -11,4 +11,4 @@ Next.js frontend for the YELIMA healthcare portal.
 
 - Uses dummy data only.
 - Built with Next.js app router and TypeScript.
-- Pages included: Dashboard, Appointments, Patients, Chats, Profile.
+- Pages included: Dashboard, Appointments, Patients, Profile.
