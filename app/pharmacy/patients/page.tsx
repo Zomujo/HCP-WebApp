@@ -131,7 +131,7 @@ export default function PharmacyPatientsPage() {
                     <td>{patient.gender || 'N/A'}</td>
                     <td>{patient.chronicConditions?.join(', ') || 'N/A'}</td>
                     <td>
-                      <span className={`status-pill status-${(patient.status || 'stable').toLowerCase()}`}>
+                      <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
                         {patient.adherence || patient.status || 'N/A'}
                       </span>
                     </td>

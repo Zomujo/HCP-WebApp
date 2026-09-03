@@ -145,7 +145,7 @@ export function normalizePhoneNumber(phone: string): string {
 }
 
 function capitalizeStatus(status?: string): string {
-  if (!status) return 'Stable';
+  if (!status) return 'Unknown';
   return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
 }
 
@@ -860,7 +860,8 @@ export const hcpPatientApi = {
       `/api/v1/hcp/patients/${patientId}/vital-histories/logs`,
       'GET'
     );
-    return extractArray<any>(response.data);
+    const rows = extractArray<any>(response.data);
+    return rows;
   },
 
   getVitalHistoryLogById: async (patientId: string, logId: string): Promise<any> => {
@@ -1044,70 +1045,6 @@ export const facilityApi = {
       'GET'
     );
     return response.data!;
-  },
-};
-
-// Chat APIs (basic endpoints)
-export const chatApi = {
-  getHcpSessions: async (): Promise<any[]> => {
-    const response = await apiCall<ApiResponse<any>>(
-      '/api/v1/chat/hcp/sessions',
-      'GET'
-    );
-    return extractArray<any>(response.data).map((session: any) => {
-      const patientName =
-        session.patient?.name ||
-        [session.patient?.firstName, session.patient?.lastName].filter(Boolean).join(' ').trim() ||
-        session.name ||
-        session.title ||
-        session.roomName ||
-        'Unknown patient';
-
-      const latestText =
-        session.latestMessage?.message ||
-        session.latestMessage?.text ||
-        session.lastMessage?.message ||
-        session.lastMessage?.text ||
-        session.latest ||
-        'No messages yet';
-
-      const latestTimeRaw =
-        session.latestMessage?.createdAt ||
-        session.lastMessage?.createdAt ||
-        session.updatedAt ||
-        session.createdAt;
-
-      const latestTime = latestTimeRaw
-        ? new Date(latestTimeRaw).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : '';
-
-      return {
-        id: session.id || session.roomId || session._id,
-        name: patientName,
-        latest: latestText,
-        time: latestTime,
-      };
-    }).filter((session: any) => session.id);
-  },
-
-  getMessages: async (roomId: string): Promise<any[]> => {
-    const response = await apiCall<ApiResponse<any>>(
-      `/api/v1/chat/hcp/rooms/${roomId}/messages`,
-      'GET'
-    );
-    return extractArray<any>(response.data).map((message: any) => ({
-      id: message.id || message._id,
-      type:
-        message.direction === 'outgoing' ||
-        message.senderType === 'hcp' ||
-        message.fromMe === true
-          ? 'to'
-          : 'from',
-      text: message.message || message.text || '',
-      time: message.createdAt
-        ? new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : '',
-    })).filter((message: any) => message.text);
   },
 };
 

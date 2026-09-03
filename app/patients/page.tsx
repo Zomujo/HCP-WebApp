@@ -297,8 +297,8 @@ export default function PatientsPage() {
                         <td>{patient.lastCheckIn || 'N/A'}</td>
                         <td className="adherence-cell">{patient.adherence || 'N/A'}</td>
                         <td>
-                          <span className={`status-pill status-${(patient.status || 'stable').toLowerCase()}`}>
-                            {patient.status || 'Stable'}
+                          <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
+                            {patient.status || 'Unknown'}
                           </span>
                         </td>
                         <td className="row-arrow">

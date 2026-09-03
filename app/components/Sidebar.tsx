@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../lib/AuthContext';
 import { useState } from 'react';
 
-type NavIconName = 'overview' | 'appointments' | 'patients' | 'chats' | 'profile';
+type NavIconName = 'overview' | 'appointments' | 'patients' | 'profile';
 
 interface NavItem {
   href: string;
@@ -42,14 +42,6 @@ function NavIcon({ name }: { name: NavIconName }) {
     );
   }
 
-  if (name === 'chats') {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M4.5 6.5h15a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-8l-4.5 3v-3H4.5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z" />
-      </svg>
-    );
-  }
-
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <circle cx="12" cy="8" r="3.5" />
@@ -62,7 +54,6 @@ const healthWorkerNavItems: NavItem[] = [
   { href: '/dashboard', label: 'Overview', icon: 'overview' },
   { href: '/appointments', label: 'Appointments', icon: 'appointments' },
   { href: '/patients', label: 'Patients', icon: 'patients' },
-  { href: '#', label: 'Coming Soon', icon: 'chats' },
   { href: '/profile', label: 'Profile', icon: 'profile' },
 ];
 
