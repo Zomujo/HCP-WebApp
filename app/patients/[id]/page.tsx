@@ -5,13 +5,15 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Sidebar } from '../../components/Sidebar';
 import { hcpPatientApi } from '../../lib/api';
+import { formatConditions } from '../../lib/format';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import type { Patient, Appointment, Medication } from '../../lib/api';
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
+  ReferenceArea,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -21,6 +23,25 @@ import {
 const tabs = ['Overview', 'Readings', 'Medication', 'Appointments'] as const;
 type TabName = (typeof tabs)[number];
 type AppointmentStatusFilter = 'all' | Appointment['status'];
+type VitalDateRange = 'thisWeek' | 'last3Months' | 'lastYear' | 'custom';
+
+// Inclusive calendar dates in yyyy-mm-dd form, as produced by <input type="date">.
+interface CustomDateRange {
+  from: string;
+  to: string;
+}
+
+function toDateInputValue(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function parseDateInputValue(value: string): Date | null {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
 
 interface BloodPressureReading {
   recordedAt: string;
@@ -86,7 +107,61 @@ function extractRecordedAt(entry: any): string {
     if (parsed) return parsed.toISOString();
   }
 
-  return '';
+  // Vital logs carry no date field, but their Mongo ObjectId embeds the creation time.
+  const createdFromId = objectIdTimestamp(entry.id ?? entry._id);
+  return createdFromId ? createdFromId.toISOString() : '';
+}
+
+function objectIdTimestamp(value: unknown): Date | null {
+  if (typeof value !== 'string' || !/^[0-9a-f]{24}$/i.test(value)) return null;
+  const date = new Date(parseInt(value.slice(0, 8), 16) * 1000);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isWithinDateRange(
+  recordedAt: string,
+  range: VitalDateRange,
+  custom: CustomDateRange,
+  now = new Date()
+): boolean {
+  const date = parseTimestamp(recordedAt);
+  if (!date) return false;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (range) {
+    case 'thisWeek': {
+      // Weeks start on Monday.
+      const startOfWeek = new Date(startOfToday);
+      startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay() + 6) % 7));
+      return date >= startOfWeek;
+    }
+    case 'last3Months':
+      return date >= new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+    case 'lastYear':
+      return date >= new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+    case 'custom': {
+      const from = parseDateInputValue(custom.from);
+      const to = parseDateInputValue(custom.to);
+      if (!from || !to) return true;
+      const [start, end] = from <= to ? [from, to] : [to, from];
+      const endExclusive = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+      return date >= start && date < endExclusive;
+    }
+  }
+}
+
+// Trend labels are not always parseable dates, so fall back to the (dated) logs for the same range.
+function pickRangeReadings<T extends { recordedAt: string }>(
+  trendReadings: T[],
+  logReadings: T[],
+  range: VitalDateRange,
+  custom: CustomDateRange
+): T[] {
+  if (trendReadings.length > 0 && trendReadings.every((reading) => reading.recordedAt)) {
+    return sortByRecordedAt(trendReadings);
+  }
+  const logsInRange = logReadings.filter((reading) => isWithinDateRange(reading.recordedAt, range, custom));
+  if (logsInRange.length > 0) return sortByRecordedAt(logsInRange);
+  return trendReadings.length > 0 ? sortByRecordedAt(trendReadings) : [];
 }
 
 // Comparing undated readings via new Date('') yields NaN, which scrambles the order, so fall back to input order.
@@ -239,6 +314,101 @@ function getBloodPressureSeverity(reading?: BloodPressureReading): string {
   return 'NORMAL';
 }
 
+type ReadingTone = 'low' | 'normal' | 'elevated' | 'high' | 'critical' | 'none';
+
+interface ReadingStatus {
+  label: string;
+  tone: ReadingTone;
+}
+
+const VITAL_RANGE_OPTIONS: Array<{ value: VitalDateRange; label: string }> = [
+  { value: 'thisWeek', label: 'This week' },
+  { value: 'last3Months', label: 'Last 3 months' },
+  { value: 'lastYear', label: 'Last year' },
+  { value: 'custom', label: 'Custom dates' },
+];
+
+function formatShortDate(value: string): string {
+  const date = parseDateInputValue(value);
+  return date ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : value;
+}
+
+// Adult office BP categories (ACC/AHA), with hypotension split out so low readings are not shown as normal.
+function classifyBloodPressure(reading?: { systolic: number; diastolic: number }): ReadingStatus {
+  if (!reading) return { label: 'No reading', tone: 'none' };
+  const { systolic, diastolic } = reading;
+  if (systolic >= 180 || diastolic >= 120) return { label: 'Crisis', tone: 'critical' };
+  if (systolic < 90 || diastolic < 60) return { label: 'Low', tone: 'low' };
+  if (systolic >= 140 || diastolic >= 90) return { label: 'High · Stage 2', tone: 'high' };
+  if (systolic >= 130 || diastolic >= 80) return { label: 'High · Stage 1', tone: 'elevated' };
+  if (systolic >= 120) return { label: 'Elevated', tone: 'elevated' };
+  return { label: 'Normal', tone: 'normal' };
+}
+
+// Random plasma glucose bands in mmol/L.
+function classifyBloodSugar(value?: number): ReadingStatus {
+  if (value === undefined || !Number.isFinite(value)) return { label: 'No reading', tone: 'none' };
+  if (value < 4) return { label: 'Low', tone: 'low' };
+  if (value <= 7.8) return { label: 'Normal', tone: 'normal' };
+  if (value < 11.1) return { label: 'High', tone: 'elevated' };
+  return { label: 'Very high', tone: 'high' };
+}
+
+function buildTicks([min, max]: [number, number], step: number): number[] {
+  const ticks: number[] = [];
+  for (let value = min; value <= max; value += step) ticks.push(value);
+  return ticks;
+}
+
+function formatDelta(current?: number, previous?: number, digits = 0): string | null {
+  if (current === undefined || previous === undefined) return null;
+  const diff = Number((current - previous).toFixed(digits));
+  if (diff === 0) return 'no change';
+  return `${diff > 0 ? '↑' : '↓'} ${Math.abs(diff).toFixed(digits)}`;
+}
+
+function formatReadingTimestamp(recordedAt: string): string {
+  const date = parseTimestamp(recordedAt);
+  if (!date) return 'Date not recorded';
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function VitalStatCard({
+  label,
+  value,
+  unit,
+  status,
+  delta,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  status: ReadingStatus;
+  delta: string | null;
+}) {
+  return (
+    <div className={`rd-stat rd-tone-${status.tone}`}>
+      <div className="rd-stat-head">
+        <span className="rd-stat-label">{label}</span>
+        <span className={`rd-pill rd-tone-${status.tone}`}>{status.label}</span>
+      </div>
+      <p className="rd-stat-value">
+        {value}
+        {value !== '—' && <span>{unit}</span>}
+      </p>
+      <p className="rd-stat-foot">
+        Latest reading{delta ? ` · ${delta} since previous` : ''}
+      </p>
+    </div>
+  );
+}
+
 // Falls back to a positional label only when a reading genuinely has no timestamp.
 function buildChartLabels(readings: Array<{ recordedAt: string }>): string[] {
   const dates = readings.map((reading) => parseTimestamp(reading.recordedAt));
@@ -287,16 +457,28 @@ export default function PatientDetailsPage() {
   const [activeTab, setActiveTab] = useState<TabName>('Overview');
   const [patient, setPatient] = useState<Patient | null>(null);
   const [vitals, setVitals] = useState<any[]>([]);
-  const [bloodPressureReadings, setBloodPressureReadings] = useState<BloodPressureReading[]>([]);
-  const [bloodSugarReadings, setBloodSugarReadings] = useState<BloodSugarReading[]>([]);
+  // Raw sources; the visible readings are filtered from these by the selected date range at render time.
+  const [bloodPressureSource, setBloodPressureSource] = useState<{ trend: BloodPressureReading[]; logs: BloodPressureReading[] }>({ trend: [], logs: [] });
+  const [bloodSugarSource, setBloodSugarSource] = useState<{ trend: BloodSugarReading[]; logs: BloodSugarReading[] }>({ trend: [], logs: [] });
   const [latestBloodPressureReading, setLatestBloodPressureReading] = useState<BloodPressureReading | undefined>();
   const [latestBloodSugarReading, setLatestBloodSugarReading] = useState<BloodSugarReading | undefined>();
+  const [previousBloodPressureReading, setPreviousBloodPressureReading] = useState<BloodPressureReading | undefined>();
+  const [previousBloodSugarReading, setPreviousBloodSugarReading] = useState<BloodSugarReading | undefined>();
+  const [showAllReadings, setShowAllReadings] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [adherenceData, setAdherenceData] = useState<{ date: string; taken: boolean }[]>([]);
   const [messageText, setMessageText] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<AppointmentStatusFilter>('all');
+  const [vitalDateRange, setVitalDateRange] = useState<VitalDateRange>('last3Months');
+  const [customDateRange, setCustomDateRange] = useState<CustomDateRange>(() => {
+    const today = new Date();
+    const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+    return { from: toDateInputValue(monthAgo), to: toDateInputValue(today) };
+  });
+  // The backend trend endpoints only cover fixed windows; of ours, only "this week" maps onto one.
+  const useWeekTrends = vitalDateRange === 'thisWeek';
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [isSavingAppointment, setIsSavingAppointment] = useState(false);
   const [readingComment, setReadingComment] = useState('');
@@ -329,8 +511,8 @@ export default function PatientDetailsPage() {
           hcpPatientApi.getPatientById(patientId),
           hcpPatientApi.getPatientVitals(patientId).catch(() => []),
           hcpPatientApi.getPatientVitalHistoryLogs(patientId).catch(() => []),
-          hcpPatientApi.getBloodPressureTrends(patientId, 'thisMonth').catch(() => null),
-          hcpPatientApi.getVitalHistoryTrends(patientId, 'bloodSugar', 'thisMonth').catch(() => null),
+          useWeekTrends ? hcpPatientApi.getBloodPressureTrends(patientId, 'thisWeek').catch(() => null) : null,
+          useWeekTrends ? hcpPatientApi.getVitalHistoryTrends(patientId, 'bloodSugar', 'thisWeek').catch(() => null) : null,
           hcpPatientApi.getPatientAppointments(patientId),
           hcpPatientApi.getPatientMedications(patientId),
         ]);
@@ -345,17 +527,13 @@ export default function PatientDetailsPage() {
             : [];
         const allVitalEntries = mergeVitalEntries(logsArray, latestVitalsArray);
         const trendReadings = mapBloodPressureTrends(bpTrends);
-        setBloodPressureReadings(
-          trendReadings.length > 0 ? sortByRecordedAt(trendReadings) : mapBloodPressureLogs(allVitalEntries)
-        );
+        setBloodPressureSource({ trend: trendReadings, logs: mapBloodPressureLogs(allVitalEntries) });
         const sugarTrendReadings = mapVitalTrends(sugarTrends);
-        setBloodSugarReadings(
-          sugarTrendReadings.length > 0
-            ? sortByRecordedAt(sugarTrendReadings)
-            : mapBloodSugarLogs(allVitalEntries)
-        );
+        setBloodSugarSource({ trend: sugarTrendReadings, logs: mapBloodSugarLogs(allVitalEntries) });
         setLatestBloodPressureReading(mapBloodPressureLogs(latestVitalsArray).at(-1));
+        setPreviousBloodPressureReading(mapBloodPressureLogs(latestVitalsArray).at(-2));
         setLatestBloodSugarReading(mapBloodSugarLogs(latestVitalsArray).at(-1));
+        setPreviousBloodSugarReading(mapBloodSugarLogs(latestVitalsArray).at(-2));
         setAppointments(appointmentsData);
         setMedications(medicationsData);
 
@@ -375,7 +553,7 @@ export default function PatientDetailsPage() {
     if (patientId) {
       loadData();
     }
-  }, [patientId]);
+  }, [patientId, useWeekTrends]);
 
   const primaryMedicationId = medications[0]?.id;
 
@@ -501,10 +679,12 @@ export default function PatientDetailsPage() {
       const refreshedVitals = await hcpPatientApi.getPatientVitals(patientId).catch(() => []);
       setVitals(Array.isArray(refreshedVitals) ? refreshedVitals : []);
       const refreshedLogs = await hcpPatientApi.getPatientVitalHistoryLogs(patientId).catch(() => []);
-      const refreshedTrends = await hcpPatientApi.getBloodPressureTrends(patientId, 'thisMonth').catch(() => null);
-      const refreshedSugarTrends = await hcpPatientApi
-        .getVitalHistoryTrends(patientId, 'bloodSugar', 'thisMonth')
-        .catch(() => null);
+      const refreshedTrends = useWeekTrends
+        ? await hcpPatientApi.getBloodPressureTrends(patientId, 'thisWeek').catch(() => null)
+        : null;
+      const refreshedSugarTrends = useWeekTrends
+        ? await hcpPatientApi.getVitalHistoryTrends(patientId, 'bloodSugar', 'thisWeek').catch(() => null)
+        : null;
       const logsArray = Array.isArray(refreshedLogs) ? refreshedLogs : [];
       const latestVitalsArray = Array.isArray(refreshedVitals)
         ? refreshedVitals
@@ -514,18 +694,12 @@ export default function PatientDetailsPage() {
       const allVitalEntries = mergeVitalEntries(logsArray, latestVitalsArray);
       const refreshedTrendReadings = mapBloodPressureTrends(refreshedTrends);
       const refreshedSugarTrendReadings = mapVitalTrends(refreshedSugarTrends);
-      setBloodPressureReadings(
-        refreshedTrendReadings.length > 0
-          ? sortByRecordedAt(refreshedTrendReadings)
-          : mapBloodPressureLogs(allVitalEntries)
-      );
-      setBloodSugarReadings(
-        refreshedSugarTrendReadings.length > 0
-          ? sortByRecordedAt(refreshedSugarTrendReadings)
-          : mapBloodSugarLogs(allVitalEntries)
-      );
+      setBloodPressureSource({ trend: refreshedTrendReadings, logs: mapBloodPressureLogs(allVitalEntries) });
+      setBloodSugarSource({ trend: refreshedSugarTrendReadings, logs: mapBloodSugarLogs(allVitalEntries) });
       setLatestBloodPressureReading(mapBloodPressureLogs(latestVitalsArray).at(-1));
+      setPreviousBloodPressureReading(mapBloodPressureLogs(latestVitalsArray).at(-2));
       setLatestBloodSugarReading(mapBloodSugarLogs(latestVitalsArray).at(-1));
+      setPreviousBloodSugarReading(mapBloodSugarLogs(latestVitalsArray).at(-2));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save patient vitals');
     } finally {
@@ -662,6 +836,8 @@ export default function PatientDetailsPage() {
     : appointments.filter((appointment) => appointment.status === appointmentStatusFilter);
   const upcoming = filteredAppointments.filter((a) => a.status === 'scheduled' || a.status === 'active' || a.status === 'rescheduled');
   const past = filteredAppointments.filter((a) => a.status === 'completed' || a.status === 'cancelled');
+  const bloodPressureReadings = pickRangeReadings(bloodPressureSource.trend, bloodPressureSource.logs, vitalDateRange, customDateRange);
+  const bloodSugarReadings = pickRangeReadings(bloodSugarSource.trend, bloodSugarSource.logs, vitalDateRange, customDateRange);
   const chartReadings = bloodPressureReadings;
   const latestBloodPressure = latestBloodPressureReading;
   const currentBloodPressure = latestBloodPressure
@@ -681,6 +857,43 @@ export default function PatientDetailsPage() {
     name: bloodSugarChartLabels[index],
     glucose: reading.value,
   }));
+  // Fixed clinical baselines keep the scale stable between patients; widen only when readings exceed them.
+  const bloodPressureDomain: [number, number] = [
+    Math.min(40, ...chartReadings.map((reading) => Math.floor(reading.diastolic / 20) * 20)),
+    Math.max(200, ...chartReadings.map((reading) => Math.ceil(reading.systolic / 20) * 20)),
+  ];
+  const bloodSugarDomain: [number, number] = [
+    0,
+    Math.max(15, ...bloodSugarChartReadings.map((reading) => Math.ceil(Number(reading.value) / 5) * 5)),
+  ];
+  const bloodPressureTicks = buildTicks(bloodPressureDomain, 20);
+  const bloodSugarTicks = buildTicks(bloodSugarDomain, bloodSugarDomain[1] > 20 ? 5 : 3);
+  const bloodPressureStatus = classifyBloodPressure(latestBloodPressure);
+  const bloodSugarStatus = classifyBloodSugar(currentBloodSugar);
+  const bloodPressureDelta = formatDelta(latestBloodPressure?.systolic, previousBloodPressureReading?.systolic);
+  const bloodSugarDelta = formatDelta(currentBloodSugar, previousBloodSugarReading?.value, 1);
+  const rangeLabel = vitalDateRange === 'custom'
+    ? `${formatShortDate(customDateRange.from)} – ${formatShortDate(customDateRange.to)}`
+    : VITAL_RANGE_OPTIONS.find((option) => option.value === vitalDateRange)?.label ?? '';
+  const readingLog = [
+    ...bloodPressureReadings.map((reading) => ({
+      recordedAt: reading.recordedAt,
+      type: 'Blood pressure',
+      kind: 'bp',
+      value: `${reading.systolic} / ${reading.diastolic}`,
+      unit: 'mmHg',
+      status: classifyBloodPressure(reading),
+    })),
+    ...bloodSugarReadings.map((reading) => ({
+      recordedAt: reading.recordedAt,
+      type: 'Blood glucose',
+      kind: 'glucose',
+      value: String(reading.value),
+      unit: 'mmol/L',
+      status: classifyBloodSugar(reading.value),
+    })),
+  ].sort((a, b) => (parseTimestamp(b.recordedAt)?.getTime() ?? 0) - (parseTimestamp(a.recordedAt)?.getTime() ?? 0));
+  const visibleReadingLog = showAllReadings ? readingLog : readingLog.slice(0, 6);
 
   return (
     <ProtectedRoute requiredRole="health-worker">
@@ -694,7 +907,7 @@ export default function PatientDetailsPage() {
                 {patient.firstName} {patient.lastName}
               </h1>
               <p className="text-muted" style={{ margin: '4px 0 0' }}>
-                {patient.age} • {patient.chronicConditions?.join(', ') || 'N/A'} • Patient since {patient.joined || 'N/A'}
+                {patient.age} • {formatConditions(patient.chronicConditions)} • Patient since {patient.joined || 'N/A'}
               </p>
             </div>
           </section>
@@ -757,7 +970,7 @@ export default function PatientDetailsPage() {
                     </div>
                     <div>
                       <p className="block-label">Conditions</p>
-                      <p>{patient.chronicConditions?.join(', ') || 'N/A'}</p>
+                      <p>{formatConditions(patient.chronicConditions)}</p>
                     </div>
                     <div>
                       <p className="block-label">Registered</p>
@@ -883,121 +1096,132 @@ export default function PatientDetailsPage() {
           )}
 
           {activeTab === 'Readings' && (
-            <section className="readings-workspace">
-              <div className="readings-page-intro">
+            <section className="readings-workspace rd">
+              <div className="rd-toolbar">
                 <div>
-                  <p className="eyebrow">Clinical monitoring</p>
-                  <h2>Patient readings</h2>
-                  <p>Review trends and record a new measurement for this patient.</p>
+                  <h2 className="rd-title">Readings</h2>
+                  <p className="rd-subtitle">Vitals trends and history for this patient.</p>
                 </div>
-                <div className={`reading-status ${getBloodPressureSeverity(latestBloodPressure).toLowerCase().replace(' ', '-')}`}>
-                  <span className="reading-status-dot" />
-                  {getBloodPressureSeverity(latestBloodPressure)}
-                </div>
-              </div>
-
-              <div className="readings-summary-grid">
-                <div className="reading-summary-card reading-summary-card-primary">
-                  <span className="reading-summary-label">Blood pressure</span>
-                  <strong>{currentBloodPressure}</strong>
-                  <span>mmHg · latest reading</span>
-                </div>
-                <div className="reading-summary-card">
-                  <span className="reading-summary-label">Blood glucose</span>
-                  <strong>{currentBloodSugar ?? '—'}</strong>
-                  <span>mmol/L · latest reading</span>
-                </div>
-                <div className="reading-summary-card">
-                  <span className="reading-summary-label">Blood pressure history</span>
-                  <strong>{chartReadings.length}</strong>
-                  <span>blood pressure entries</span>
-                </div>
-                <div className="reading-summary-card">
-                  <span className="reading-summary-label">Blood glucose history</span>
-                  <strong>{bloodSugarReadings.length}</strong>
-                  <span>blood glucose entries</span>
-                </div>
-              </div>
-
-              <div className="readings-panel readings-panel-chart">
-                <div className="readings-section-heading">
-                  <div>
-                    <p className="eyebrow">Trend analysis</p>
-                    <h3>Blood pressure</h3>
+                <div className="rd-toolbar-actions">
+                  <div className="rd-segmented" role="group" aria-label="Date range">
+                    {VITAL_RANGE_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={vitalDateRange === option.value ? 'active' : ''}
+                        aria-pressed={vitalDateRange === option.value}
+                        onClick={() => setVitalDateRange(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
-                  <span className="readings-current-value">
-                    {currentBloodPressure}
-                  </span>
+                  {vitalDateRange === 'custom' && (
+                    <div className="rd-date-range">
+                      <label>
+                        <span>From</span>
+                        <input
+                          type="date"
+                          value={customDateRange.from}
+                          max={customDateRange.to || toDateInputValue(new Date())}
+                          onChange={(event) => setCustomDateRange((prev) => ({ ...prev, from: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span>To</span>
+                        <input
+                          type="date"
+                          value={customDateRange.to}
+                          min={customDateRange.from}
+                          max={toDateInputValue(new Date())}
+                          onChange={(event) => setCustomDateRange((prev) => ({ ...prev, to: event.target.value }))}
+                        />
+                      </label>
+                    </div>
+                  )}
+                  <button type="button" className="rd-btn-primary" onClick={() => setIsVitalsModalOpen(true)}>
+                    + Record vitals
+                  </button>
                 </div>
-                <p className="readings-description">Systolic and diastolic pressure across recorded visits.</p>
+              </div>
 
-                <div className="readings-chart-box">
-                  <div className="readings-chart-inner">
+              <div className="rd-stats">
+                <VitalStatCard
+                  label="Blood pressure"
+                  value={latestBloodPressure ? `${latestBloodPressure.systolic}/${latestBloodPressure.diastolic}` : '—'}
+                  unit="mmHg"
+                  status={bloodPressureStatus}
+                  delta={bloodPressureDelta && `systolic ${bloodPressureDelta}`}
+                />
+                <VitalStatCard
+                  label="Blood glucose"
+                  value={currentBloodSugar !== undefined ? String(currentBloodSugar) : '—'}
+                  unit="mmol/L"
+                  status={bloodSugarStatus}
+                  delta={bloodSugarDelta}
+                />
+              </div>
+
+              <div className="rd-charts">
+                <div className="rd-card">
+                  <div className="rd-card-head">
+                    <div>
+                      <h3>Blood pressure</h3>
+                      <p>{bloodPressureChartData.length} readings · {rangeLabel}</p>
+                    </div>
+                    <div className="rd-legend">
+                      <span><i style={{ background: '#ee9342' }} />Systolic</span>
+                      <span><i style={{ background: '#425876' }} />Diastolic</span>
+                      <span><i className="rd-legend-dash" />Threshold</span>
+                    </div>
+                  </div>
+                  <div className="rd-chart">
                     {bloodPressureChartData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={bloodPressureChartData} margin={{ top: 12, right: 18, left: 0, bottom: 4 }}>
-                          <CartesianGrid stroke="#e7edf4" strokeDasharray="3 5" vertical={false} />
-                          <XAxis dataKey="name" tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} />
-                          <YAxis tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} width={34} />
-                          <Tooltip content={<ChartTooltip unit="mmHg" />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
-                          <Legend verticalAlign="top" align="right" height={30} iconType="circle" />
-                          <Line type="monotone" dataKey="systolic" name="Systolic" stroke="#ee9342" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 7, strokeWidth: 3 }} />
-                          <Line type="monotone" dataKey="diastolic" name="Diastolic" stroke="#425876" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 7, strokeWidth: 3 }} />
+                        <LineChart data={bloodPressureChartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                          <CartesianGrid stroke="#edf0f5" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#d6dde7' }} interval="preserveStartEnd" minTickGap={24} padding={{ left: 16, right: 16 }} />
+                          <YAxis tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} width={36} domain={bloodPressureDomain} ticks={bloodPressureTicks} />
+                          <Tooltip content={<ChartTooltip unit="mmHg" />} cursor={{ stroke: '#cbd5e1' }} />
+                          <ReferenceLine y={140} stroke="#e5a3a3" strokeDasharray="4 4" label={{ value: '140', position: 'insideTopRight', fill: '#c26464', fontSize: 10 }} />
+                          <ReferenceLine y={90} stroke="#aebbd0" strokeDasharray="4 4" label={{ value: '90', position: 'insideTopRight', fill: '#6b7d96', fontSize: 10 }} />
+                          <Line type="linear" dataKey="systolic" name="Systolic" stroke="#ee9342" strokeWidth={2} dot={{ r: 3.5, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5, strokeWidth: 2 }} isAnimationActive={false} />
+                          <Line type="linear" dataKey="diastolic" name="Diastolic" stroke="#425876" strokeWidth={2} dot={{ r: 3.5, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5, strokeWidth: 2 }} isAnimationActive={false} />
                         </LineChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div className="chart-empty-state">No blood pressure readings available.</div>
+                      <div className="rd-empty">No blood pressure readings in this period.</div>
                     )}
                   </div>
                 </div>
-              </div>
 
-              <div className="readings-panel readings-panel-chart">
-                <div className="readings-section-heading">
-                  <div>
-                    <p className="eyebrow">Trend analysis</p>
-                    <h3>Blood glucose</h3>
+                <div className="rd-card">
+                  <div className="rd-card-head">
+                    <div>
+                      <h3>Blood glucose</h3>
+                      <p>{bloodSugarChartData.length} readings · {rangeLabel}</p>
+                    </div>
+                    <div className="rd-legend">
+                      <span><i style={{ background: '#0f8b8d' }} />Glucose</span>
+                      <span><i className="rd-legend-band" />Target 4–7</span>
+                    </div>
                   </div>
-                  <span className="readings-current-value">
-                    {currentBloodSugar ?? 'No reading recorded'}
-                  </span>
-                </div>
-                <p className="readings-description">Glucose values across recorded visits.</p>
-
-                <div className="readings-chart-box">
-                  <div className="readings-chart-inner">
+                  <div className="rd-chart">
                     {bloodSugarChartData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={bloodSugarChartData} margin={{ top: 12, right: 18, left: 0, bottom: 4 }}>
-                          <CartesianGrid stroke="#e7edf4" strokeDasharray="3 5" vertical={false} />
-                          <XAxis dataKey="name" tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} />
-                          <YAxis tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} width={34} />
-                          <Tooltip content={<ChartTooltip unit="mmol/L" />} cursor={{ stroke: '#cbd5e1', strokeDasharray: '4 4' }} />
-                          <Legend verticalAlign="top" align="right" height={30} iconType="circle" />
-                          <Line type="monotone" dataKey="glucose" name="Blood glucose" stroke="#ee9342" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 7, strokeWidth: 3 }} />
+                        <LineChart data={bloodSugarChartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                          <CartesianGrid stroke="#edf0f5" vertical={false} />
+                          <XAxis dataKey="name" tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#d6dde7' }} interval="preserveStartEnd" minTickGap={24} padding={{ left: 16, right: 16 }} />
+                          <YAxis tick={{ fill: '#8290a2', fontSize: 11 }} tickLine={false} axisLine={false} width={36} domain={bloodSugarDomain} ticks={bloodSugarTicks} />
+                          <Tooltip content={<ChartTooltip unit="mmol/L" />} cursor={{ stroke: '#cbd5e1' }} />
+                          <ReferenceArea y1={4} y2={7} fill="#3fa36b" fillOpacity={0.08} stroke="none" />
+                          <Line type="linear" dataKey="glucose" name="Blood glucose" stroke="#0f8b8d" strokeWidth={2} dot={{ r: 3.5, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5, strokeWidth: 2 }} isAnimationActive={false} />
                         </LineChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div className="chart-empty-state">No blood glucose readings available.</div>
+                      <div className="rd-empty">No blood glucose readings in this period.</div>
                     )}
                   </div>
-                </div>
-              </div>
-
-              <div className="readings-panel readings-entry-panel readings-entry-launcher">
-                <div className="readings-section-heading">
-                  <div>
-                    <p className="eyebrow">Clinical action</p>
-                    <h3>Record a new set of vitals</h3>
-                    <p className="readings-description">Add measurements taken during this visit.</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="primary readings-launch-button"
-                    onClick={() => setIsVitalsModalOpen(true)}
-                  >
-                    Record vitals
-                  </button>
                 </div>
               </div>
 
@@ -1086,47 +1310,47 @@ export default function PatientDetailsPage() {
                 </div>
               )}
 
-              {bloodPressureReadings.length > 0 && (
-                <div className="readings-history-panel">
-                  <div className="readings-section-heading">
-                    <div>
-                      <p className="eyebrow">History</p>
-                      <h3>Recent blood pressure readings</h3>
-                    </div>
-                    <span className="history-count">{bloodPressureReadings.length} total</span>
-                  </div>
-                  <div className="readings-history-list">
-                    {bloodPressureReadings.slice(-4).reverse().map((reading, index) => (
-                      <div key={`${reading.systolic}-${reading.diastolic}-${reading.recordedAt}-${index}`} className="reading-mini-card">
-                        <span className="history-reading-label">BP</span>
-                        <strong>{reading.systolic} / {reading.diastolic}</strong>
-                        <span className="history-reading-unit">mmHg</span>
-                      </div>
-                    ))}
+              <div className="rd-card">
+                <div className="rd-card-head">
+                  <div>
+                    <h3>Reading log</h3>
+                    <p>{readingLog.length} entries · {rangeLabel}</p>
                   </div>
                 </div>
-              )}
-
-              {bloodSugarReadings.length > 0 && (
-                <div className="readings-history-panel">
-                  <div className="readings-section-heading">
-                    <div>
-                      <p className="eyebrow">History</p>
-                      <h3>Recent blood sugar readings</h3>
+                {readingLog.length > 0 ? (
+                  <>
+                    <div className="rd-table-wrap">
+                      <table className="rd-table">
+                        <thead>
+                          <tr>
+                            <th>Date &amp; time</th>
+                            <th>Measurement</th>
+                            <th>Value</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleReadingLog.map((entry, index) => (
+                            <tr key={`${entry.type}-${entry.recordedAt}-${entry.value}-${index}`}>
+                              <td className="rd-muted">{formatReadingTimestamp(entry.recordedAt)}</td>
+                              <td><span className={`rd-measure rd-measure-${entry.kind}`}>{entry.type}</span></td>
+                              <td><strong>{entry.value}</strong> <span className="rd-muted">{entry.unit}</span></td>
+                              <td><span className={`rd-pill rd-tone-${entry.status.tone}`}>{entry.status.label}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                    <span className="history-count">{bloodSugarReadings.length} total</span>
-                  </div>
-                  <div className="readings-history-list">
-                    {bloodSugarReadings.slice(-4).reverse().map((reading, index) => (
-                      <div key={`${reading.value}-${reading.recordedAt}-${index}`} className="reading-mini-card">
-                        <span className="history-reading-label">GLU</span>
-                        <strong>{reading.value}</strong>
-                        <span className="history-reading-unit">mmol/L</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                    {readingLog.length > 6 && (
+                      <button type="button" className="rd-link" onClick={() => setShowAllReadings((value) => !value)}>
+                        {showAllReadings ? 'Show fewer' : `Show all ${readingLog.length} entries`}
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <div className="rd-empty rd-empty-inline">No readings recorded in this period.</div>
+                )}
+              </div>
             </section>
           )}
 

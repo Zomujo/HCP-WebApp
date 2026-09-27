@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { hcpPatientApi } from '../lib/api';
+import { formatConditions } from '../lib/format';
 import { useAuth } from '../lib/AuthContext';
 
 interface DashboardStats {
@@ -233,7 +234,7 @@ export default function DashboardPage() {
                             </div>
                           </td>
                           <td>{patient.age}</td>
-                          <td>{patient.chronicConditions?.join(', ') || 'N/A'}</td>
+                          <td>{formatConditions(patient.chronicConditions)}</td>
                           <td>{patient.lastCheckIn || 'N/A'}</td>
                           <td className="adherence-cell">{patient.adherence || 'N/A'}</td>
                           <td>

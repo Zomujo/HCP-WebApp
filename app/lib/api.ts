@@ -857,7 +857,7 @@ export const hcpPatientApi = {
 
   getPatientVitalHistoryLogs: async (patientId: string): Promise<any[]> => {
     const response = await apiCall<ApiResponse<any>>(
-      `/api/v1/hcp/patients/${patientId}/vital-histories/logs`,
+      `/api/v1/hcp/patients/${patientId}/vital-histories/logs?pageSize=100`,
       'GET'
     );
     const rows = extractArray<any>(response.data);

@@ -7,6 +7,7 @@ import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { useAuth } from '../lib/AuthContext';
 import { hcpPatientApi } from '../lib/api';
+import { formatConditions } from '../lib/format';
 import type { Patient } from '../lib/api';
 
 type FilterKey = string;
@@ -293,7 +294,7 @@ export default function PatientsPage() {
                           </div>
                         </td>
                         <td>{patient.age}</td>
-                        <td>{patient.chronicConditions?.join(', ') || 'N/A'}</td>
+                        <td>{formatConditions(patient.chronicConditions)}</td>
                         <td>{patient.lastCheckIn || 'N/A'}</td>
                         <td className="adherence-cell">{patient.adherence || 'N/A'}</td>
                         <td>

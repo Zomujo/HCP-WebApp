@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Sidebar } from '../../components/Sidebar';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import { pharmacyPatientApi } from '../../lib/api';
+import { formatConditions } from '../../lib/format';
 import type { Patient } from '../../lib/api';
 
 export default function PharmacyPatientsPage() {
@@ -129,7 +130,7 @@ export default function PharmacyPatientsPage() {
                     <td>{patient.patientCode || 'N/A'}</td>
                     <td>{patient.age}</td>
                     <td>{patient.gender || 'N/A'}</td>
-                    <td>{patient.chronicConditions?.join(', ') || 'N/A'}</td>
+                    <td>{formatConditions(patient.chronicConditions)}</td>
                     <td>
                       <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
                         {patient.adherence || patient.status || 'N/A'}

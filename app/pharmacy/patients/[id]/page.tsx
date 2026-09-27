@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { Sidebar } from '../../../components/Sidebar';
 import { ProtectedRoute } from '../../../components/ProtectedRoute';
 import { pharmacyPatientApi } from '../../../lib/api';
+import { formatConditions } from '../../../lib/format';
 import type { Patient } from '../../../lib/api';
 
 interface VitalReading {
@@ -74,7 +75,7 @@ export default function PharmacyPatientDetailPage() {
                     <div><p className="block-label">Patient code</p><p>{patient.patientCode || 'N/A'}</p></div>
                     <div><p className="block-label">Age</p><p>{patient.age || 'N/A'}</p></div>
                     <div><p className="block-label">Gender</p><p>{patient.gender || 'N/A'}</p></div>
-                    <div><p className="block-label">Condition</p><p>{patient.chronicConditions?.join(', ') || 'N/A'}</p></div>
+                    <div><p className="block-label">Condition</p><p>{formatConditions(patient.chronicConditions)}</p></div>
                     <div><p className="block-label">Adherence</p><p>{patient.adherence || patient.status || 'N/A'}</p></div>
                     <div><p className="block-label">Facility</p><p>{patient.facility || 'N/A'}</p></div>
                     <div><p className="block-label">Height</p><p>{patient.height ? `${patient.height} cm` : 'N/A'}</p></div>

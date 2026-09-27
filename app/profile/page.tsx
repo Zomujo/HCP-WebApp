@@ -1,48 +1,96 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { useAuth } from '../lib/AuthContext';
 import { authApi } from '../lib/api';
 
+const DELETE_CONFIRM_PHRASE = 'DELETE';
+
 export default function ProfilePage() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const confirmInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSignOut = () => {
-    logout();
-    router.push('/login');
-  };
+  const isPharmacy = user?.role === 'pharmacy-personnel';
+  const firstName = user?.firstName || user?.email?.split('@')[0] || 'User';
+  const fullName = [firstName, user?.lastName].filter(Boolean).join(' ');
+  const roleLabel = isPharmacy ? 'Pharmacy personnel' : 'Healthcare professional';
+  const facilityName = isPharmacy
+    ? user?.firstName || 'Pharmacy'
+    : user?.facility?.name || 'Not assigned';
+  const maskedCard = user?.personnelId
+    ? `GHA-XXXXX-${user.personnelId.slice(-4).toUpperCase()}`
+    : 'Not available';
 
-  const handleDeleteAccount = async () => {
-    const confirmed = window.confirm(
-      'This permanently deletes your personnel account and signs you out. This action cannot be undone. Continue?'
-    );
-    if (!confirmed) return;
-
-    try {
-      setIsDeleting(true);
-      setDeleteError('');
-      await authApi.deleteAccount();
-      logout();
-      router.replace('/signup');
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Unable to delete your account.');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const getInitials = () => {
+  const initials = (() => {
     if (!user) return 'U';
     const first = user.firstName?.[0] || user.email?.[0] || 'U';
     const last = user.lastName?.[0] || '';
     return (first + last).toUpperCase();
+  })();
+
+  useEffect(() => {
+    if (!showDeleteModal) return;
+    confirmInputRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isDeleting) closeDeleteModal();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showDeleteModal, isDeleting]);
+
+  const handleSignOut = () => {
+    logout();
+    router.replace('/login');
   };
+
+  const openDeleteModal = () => {
+    setConfirmText('');
+    setDeleteError('');
+    setShowDeleteModal(true);
+  };
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false);
+    setConfirmText('');
+    setDeleteError('');
+  };
+
+  const canConfirmDelete = confirmText.trim().toUpperCase() === DELETE_CONFIRM_PHRASE && !isDeleting;
+
+  const handleDeleteAccount = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canConfirmDelete) return;
+
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      await authApi.deleteAccount();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Unable to delete your account. Please try again.');
+      setIsDeleting(false);
+      return;
+    }
+
+    // Account is gone server-side: clear local session and leave the protected area.
+    logout();
+    router.replace('/signup');
+  };
+
+  const details = [
+    { label: 'Full name', value: fullName },
+    { label: 'Email address', value: user?.email || 'Not available' },
+    { label: 'Role', value: roleLabel },
+    { label: isPharmacy ? 'Pharmacy' : 'Facility', value: facilityName },
+    { label: 'Ghana Card', value: maskedCard },
+  ];
 
   return (
     <ProtectedRoute>
@@ -52,64 +100,95 @@ export default function ProfilePage() {
           <div className="hcp-page-header">
             <div>
               <h1 className="hcp-page-title">Profile</h1>
-              <p className="subtitle">Your Healthcare Professional account.</p>
+              <p className="subtitle">Manage your account details and access.</p>
             </div>
           </div>
 
-          <div className="profile-wrap profile-wrap-wide">
-            <section className="profile-hero">
-              <div className="profile-head">
-                <div className="profile-photo">{getInitials()}</div>
-                <div>
-                  <p className="profile-name">{user?.firstName || user?.email?.split('@')[0] || 'User'} {user?.lastName || ''}</p>
-                  <p className="profile-role">{user?.role === 'pharmacy-personnel' ? 'Pharmacy personnel' : 'Healthcare professional'}</p>
-                  {user && <span className="badge profile-verified">Verified</span>}
+          <div className="pf-wrap">
+            <section className="pf-card pf-hero">
+              <div className="pf-avatar" aria-hidden="true">{initials}</div>
+              <div className="pf-hero-text">
+                <h2 className="pf-name">{fullName}</h2>
+                <p className="pf-meta">{roleLabel} · {facilityName}</p>
+                <div className="pf-tags">
+                  <span className="pf-tag pf-tag-success"><span className="pf-dot" />Active</span>
+                  {user && <span className="pf-tag">Verified</span>}
                 </div>
               </div>
+              <button type="button" className="pf-btn pf-btn-outline pf-hero-action" onClick={handleSignOut}>
+                Sign out
+              </button>
             </section>
 
-            <section className="panel hcp-panel profile-data-card">
-              <div className="profile-section-heading">
-                <div>
-                  <p className="eyebrow">Account overview</p>
-                  <h2>Personal details</h2>
-                </div>
-                <span className="profile-status-dot">Active</span>
-              </div>
-              <div className="profile-info-block">
-                <div>
-                  <p className="block-label">Facility</p>
-                  <p>{user?.role === 'pharmacy-personnel'
-                    ? user?.firstName || 'Pharmacy'
-                    : user?.facility?.name || 'Kumasi South Hospital'}</p>
-                </div>
-                <div>
-                  <p className="block-label">Ghana Card</p>
-                  <p>{user?.personnelId ? `GHA-XXXXX-${user.personnelId.slice(-4).toUpperCase()}` : 'Not available'}</p>
-                </div>
-                <div>
-                  <p className="block-label">Email</p>
-                  <p>{user?.email}</p>
-                </div>
-              </div>
+            <section className="pf-card">
+              <header className="pf-card-head">
+                <h3>Personal details</h3>
+                <p>Information linked to your personnel account.</p>
+              </header>
+              <dl className="pf-details">
+                {details.map((item) => (
+                  <div className="pf-row" key={item.label}>
+                    <dt>{item.label}</dt>
+                    <dd>{item.value}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
 
-            <section className="profile-actions">
-              <button className="ghost small profile-signout" onClick={handleSignOut}>Sign out</button>
-            </section>
-
-            <section className="panel hcp-panel profile-danger-zone">
-              <div>
-                <p className="eyebrow danger-eyebrow">Danger zone</p>
-                <h2>Delete account</h2>
-                <p className="text-muted">Permanently remove your personnel account and sign out of this device.</p>
+            <section className="pf-card pf-danger">
+              <div className="pf-danger-text">
+                <h3>Delete account</h3>
+                <p>
+                  Permanently remove your personnel account and all access to this workspace.
+                  This cannot be undone.
+                </p>
               </div>
-              {deleteError && <p className="profile-error" role="alert">{deleteError}</p>}
-              <button className="danger-button" onClick={handleDeleteAccount} disabled={isDeleting}>
-                {isDeleting ? 'Deleting account...' : 'Delete account'}
+              <button type="button" className="pf-btn pf-btn-danger" onClick={openDeleteModal}>
+                Delete account
               </button>
             </section>
           </div>
+
+          {showDeleteModal && (
+            <div className="pf-modal-backdrop" onClick={() => !isDeleting && closeDeleteModal()}>
+              <form
+                className="pf-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="pf-delete-title"
+                onClick={(event) => event.stopPropagation()}
+                onSubmit={handleDeleteAccount}
+              >
+                <div className="pf-modal-icon" aria-hidden="true">!</div>
+                <h3 id="pf-delete-title">Delete your account?</h3>
+                <p className="pf-modal-body">
+                  This permanently deletes the account for <strong>{user?.email}</strong> and signs you out.
+                  You will lose access to your patients, appointments and records in this workspace.
+                </p>
+                <label className="pf-modal-label" htmlFor="pf-delete-confirm">
+                  Type <strong>{DELETE_CONFIRM_PHRASE}</strong> to confirm
+                </label>
+                <input
+                  id="pf-delete-confirm"
+                  ref={confirmInputRef}
+                  className="pf-modal-input"
+                  value={confirmText}
+                  onChange={(event) => setConfirmText(event.target.value)}
+                  autoComplete="off"
+                  disabled={isDeleting}
+                />
+                {deleteError && <p className="pf-error" role="alert">{deleteError}</p>}
+                <div className="pf-modal-actions">
+                  <button type="button" className="pf-btn pf-btn-outline" onClick={closeDeleteModal} disabled={isDeleting}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="pf-btn pf-btn-danger-solid" disabled={!canConfirmDelete}>
+                    {isDeleting ? 'Deleting…' : 'Delete account'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
         </main>
       </div>
     </ProtectedRoute>
