@@ -12,6 +12,8 @@ interface DashboardStats {
   label: string;
   value: string;
   href: string;
+  hint: string;
+  tone?: 'critical';
 }
 
 interface Appointment {
@@ -118,8 +120,14 @@ export default function DashboardPage() {
         );
 
         setDashboardStats([
-          { label: 'Total Patients', value: totalPatients.toString(), href: '/patients' },
-          { label: 'Patients With Critical Readings', value: criticalCount.toString(), href: '/patients' },
+          { label: 'Total patients', value: totalPatients.toString(), href: '/patients', hint: 'Registered at your facility' },
+          {
+            label: 'Critical readings',
+            value: criticalCount.toString(),
+            href: '/patients',
+            hint: criticalCount === 1 ? 'Patient needs review' : 'Patients need review',
+            tone: criticalCount > 0 ? 'critical' : undefined,
+          },
         ]);
 
         // Set recent readings (first 3 patients with critical/caution status)
@@ -158,40 +166,35 @@ export default function DashboardPage() {
           </div>
 
           {error && (
-            <div style={{ 
-              padding: '12px', 
-              backgroundColor: '#fee', 
-              borderRadius: '6px',
-              border: '1px solid #fcc',
-              color: '#c33',
-              marginBottom: '16px'
-            }}>
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}
 
           {isLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
-              Loading dashboard...
+            <div className="loading-state" role="status">
+              <span className="spinner" aria-hidden />
+              Loading dashboard…
             </div>
           ) : (
             <>
               <section className="stats-row-figma">
                 {dashboardStats.map((stat) => (
-                  <Link key={stat.label} href={stat.href} className="stat-box-figma">
+                  <Link key={stat.label} href={stat.href} className={`stat-box-figma ${stat.tone === 'critical' ? 'stat-critical' : ''}`}>
                     <p className="overline">{stat.label}</p>
                     <p className="stat-value">{stat.value}</p>
+                    <p className="stat-hint">{stat.hint}</p>
                   </Link>
                 ))}
               </section>
 
-              <section className="panel hcp-panel" style={{ marginTop: 18 }}>
+              <section className="panel hcp-panel">
                 <div className="panel-headline-row">
                   <div>
-                    <p className="panel-title">Patient Check-ins This Week</p>
-                    <p className="text-muted">{weeklyAppointments.reduce((sum, a) => sum + a.value, 0)} Total Check-ins</p>
+                    <p className="panel-title">Patient check-ins this week</p>
+                    <p className="panel-subtitle">{weeklyAppointments.reduce((sum, a) => sum + a.value, 0)} total check-ins</p>
                   </div>
-                  <Link href="/patients" className="text-link">See All Patients</Link>
+                  <Link href="/patients" className="text-link">View all patients</Link>
                 </div>
 
                 <div className="week-grid-figma">
@@ -205,57 +208,61 @@ export default function DashboardPage() {
                 </div>
               </section>
 
-              <section className="panel hcp-panel" style={{ marginTop: 18 }}>
-                <div className="panel-headline-row" style={{ marginBottom: 10 }}>
-                  <p className="panel-title">Recent Critical Readings</p>
-                  <Link href="/patients" className="text-link">See All Critical Readings</Link>
+              <section className="panel hcp-panel">
+                <div className="panel-headline-row">
+                  <p className="panel-title">Recent critical readings</p>
+                  <Link href="/patients" className="text-link">View all</Link>
                 </div>
 
-                <table className="table hcp-table dashboard-readings-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Age</th>
-                      <th>Condition</th>
-                      <th>Last check-in</th>
-                      <th>Adherence</th>
-                      <th>Status</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentReadings.length > 0 ? (
-                      recentReadings.map((patient) => (
-                        <tr key={patient.id}>
-                          <td>
-                            <div className="table-name-cell">
-                              <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
-                              {patient.firstName} {patient.lastName}
-                            </div>
-                          </td>
-                          <td>{patient.age}</td>
-                          <td>{formatConditions(patient.chronicConditions)}</td>
-                          <td>{patient.lastCheckIn || 'N/A'}</td>
-                          <td className="adherence-cell">{patient.adherence || 'N/A'}</td>
-                          <td>
-                            <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
-                              {patient.status || 'Unknown'}
-                            </span>
-                          </td>
-                          <td className="row-arrow">
-                            <Link href={`/patients/${patient.id}`}>&gt;</Link>
+                <div className="table-wrap stack-on-mobile">
+
+                  <table className="table hcp-table dashboard-readings-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Age</th>
+                        <th>Condition</th>
+                        <th>Last check-in</th>
+                        <th>Adherence</th>
+                        <th>Status</th>
+                        <th />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentReadings.length > 0 ? (
+                        recentReadings.map((patient) => (
+                          <tr key={patient.id}>
+                            <td className="cell-primary">
+                              <div className="table-name-cell">
+                                <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
+                                {patient.firstName} {patient.lastName}
+                              </div>
+                            </td>
+                            <td data-label="Age">{patient.age}</td>
+                            <td data-label="Condition">{formatConditions(patient.chronicConditions)}</td>
+                            <td data-label="Last check-in">{patient.lastCheckIn || 'N/A'}</td>
+                            <td className="adherence-cell" data-label="Adherence">{patient.adherence || 'N/A'}</td>
+                            <td data-label="Status">
+                              <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
+                                {patient.status || 'Unknown'}
+                              </span>
+                            </td>
+                            <td className="row-arrow">
+                              <Link href={`/patients/${patient.id}`} aria-label="Open patient details"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 6l6 6-6 6" /></svg></Link>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="empty-cell">
+                            No critical readings at the moment
                           </td>
                         </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                          No critical readings at the moment
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                      )}
+                    </tbody>
+                  </table>
+
+                </div>
               </section>
             </>
           )}

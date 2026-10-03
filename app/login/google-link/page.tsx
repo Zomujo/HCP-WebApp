@@ -67,10 +67,9 @@ export default function GoogleLinkPage() {
     <main className="auth-page">
       <div className="auth-container">
         <section className="auth-form-shell">
-          <div className="auth-glow" />
-          <div className="auth-brand">
+                    <div className="auth-brand">
             <div className="logo-mark">
-              <Image src="/logo.png" alt="YELIMA logo" width={28} height={28} />
+              <Image src="/logo.png" alt="YELIMA logo" width={44} height={44} />
             </div>
             <div>
               <p className="auth-brand-title">YELIMA</p>
@@ -79,7 +78,7 @@ export default function GoogleLinkPage() {
           </div>
 
           <div className="auth-copy">
-            <h1>Link Google Account</h1>
+            <h1>Link your Google account</h1>
             <p className="text-muted">
               This email already exists. Sign in with your email and password to verify ownership and link your Google account.
             </p>
@@ -113,40 +112,26 @@ export default function GoogleLinkPage() {
             />
 
             {error && (
-              <div
-                style={{
-                  padding: '10px 12px',
-                  backgroundColor: '#fee',
-                  borderRadius: '6px',
-                  border: '1px solid #fcc',
-                  color: '#c33',
-                  fontSize: '14px',
-                }}
-              >
+              <div className="alert alert-error" role="alert">
                 {error}
               </div>
             )}
 
             <button
               type="submit"
-              className="ghost auth-action-button"
+              className="primary auth-submit-button"
               disabled={isSubmitting || isLoading}
-              style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}
             >
               {isSubmitting ? 'Verifying and linking...' : 'Verify and link Google'}
             </button>
           </form>
 
-          <p className="auth-footnote" style={{ marginTop: 16 }}>
+          <p className="auth-footnote">
             Want to use another account? <Link href="/login">Back to sign in</Link>
           </p>
         </section>
 
-        <section className="auth-hero auth-hero-login">
-          <div className="hero-copy">
-            <p>Securely connect your account once and continue with Google next time.</p>
-          </div>
-        </section>
+        <section className="auth-hero auth-hero-login" aria-hidden="true" />
       </div>
     </main>
   );

@@ -51,8 +51,8 @@ export default function PharmacyDashboardPage() {
         ]);
 
         setStats([
-          { label: 'Registered Patients', value: String(analytics.patientsCount || 0) },
-          { label: 'Vitals Recorded', value: String(analytics.vitalsRecordedCount || 0) },
+          { label: 'Registered patients', value: String(analytics.patientsCount || 0) },
+          { label: 'Vitals recorded', value: String(analytics.vitalsRecordedCount || 0) },
           { label: 'Referrals', value: String(analytics.referralsCount || 0) },
         ]);
         setRecentVitals(vitals);
@@ -81,21 +81,15 @@ export default function PharmacyDashboardPage() {
           </div>
 
           {error && (
-            <div style={{
-              padding: '12px',
-              backgroundColor: '#fee',
-              borderRadius: '6px',
-              border: '1px solid #fcc',
-              color: '#c33',
-              marginBottom: '16px'
-            }}>
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}
 
           {isLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
-              Loading dashboard...
+            <div className="loading-state" role="status">
+              <span className="spinner" aria-hidden />
+              Loading dashboard…
             </div>
           ) : (
             <>
@@ -108,60 +102,60 @@ export default function PharmacyDashboardPage() {
                 ))}
               </section>
 
-              <section className="panel hcp-panel" style={{ marginTop: 18 }}>
-                <div className="panel-headline-row" style={{ marginBottom: 10 }}>
+              <section className="panel hcp-panel">
+                <div className="panel-headline-row">
                   <div>
-                    <p className="panel-title">Referral Code</p>
-                    <p className="text-muted">Share this code when connecting new patients or partners.</p>
+                    <p className="panel-title">Referral code</p>
+                    <p className="panel-subtitle">Share this code when connecting new patients or partners.</p>
                   </div>
                 </div>
-                <div className="appointment-row" style={{ alignItems: 'center' }}>
-                  <div>
-                    <p className="appointment-title" style={{ letterSpacing: '0.08em' }}>
-                      {referralCode || 'Not available'}
-                    </p>
-                  </div>
+                <div className="referral-code-row">
+                  <code className="referral-code">{referralCode || 'Not available'}</code>
                   <button type="button" className="ghost small" onClick={handleCopyReferralCode} disabled={!referralCode}>
                     {isReferralCopied ? 'Copied' : 'Copy code'}
                   </button>
                 </div>
               </section>
 
-              <section className="panel hcp-panel" style={{ marginTop: 18 }}>
-                <div className="panel-headline-row" style={{ marginBottom: 10 }}>
+              <section className="panel hcp-panel">
+                <div className="panel-headline-row">
                   <div>
-                    <p className="panel-title">Recent Vitals Activity</p>
-                    <p className="text-muted">Latest patient vitals recorded by your pharmacy team.</p>
+                    <p className="panel-title">Recent vitals activity</p>
+                    <p className="panel-subtitle">Latest patient vitals recorded by your pharmacy team.</p>
                   </div>
-                  <Link href="/pharmacy/patients" className="text-link">See All Patients</Link>
+                  <Link href="/pharmacy/patients" className="text-link">View all patients</Link>
                 </div>
 
-                <table className="table hcp-table pharmacy-vitals-table">
-                  <thead>
-                    <tr>
-                      <th>Patient</th>
-                      <th>Patient Code</th>
-                      <th>Recorded</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentVitals.length > 0 ? (
-                      recentVitals.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.patientName}</td>
-                          <td>{item.patientCode || 'N/A'}</td>
-                          <td>{new Date(item.recordedAt).toLocaleString()}</td>
-                        </tr>
-                      ))
-                    ) : (
+                <div className="table-wrap stack-on-mobile">
+
+                  <table className="table hcp-table pharmacy-vitals-table">
+                    <thead>
                       <tr>
-                        <td colSpan={3} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                          No vitals recorded yet
-                        </td>
+                        <th>Patient</th>
+                        <th>Patient Code</th>
+                        <th>Recorded</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {recentVitals.length > 0 ? (
+                        recentVitals.map((item) => (
+                          <tr key={item.id}>
+                            <td className="cell-primary">{item.patientName}</td>
+                            <td data-label="Patient code">{item.patientCode || 'N/A'}</td>
+                            <td data-label="Recorded">{new Date(item.recordedAt).toLocaleString()}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={3} className="empty-cell">
+                            No vitals recorded yet
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+
+                </div>
               </section>
 
             </>

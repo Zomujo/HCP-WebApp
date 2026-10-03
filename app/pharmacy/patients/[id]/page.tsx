@@ -55,15 +55,20 @@ export default function PharmacyPatientDetailPage() {
         <main className="content hcp-page">
           <div className="hcp-page-header">
             <div>
-              <Link href="/pharmacy/patients" className="text-link">Back to patients</Link>
-              <h1 className="hcp-page-title" style={{ marginTop: 8 }}>
+              <Link href="/pharmacy/patients" className="back-link">← Back to patients</Link>
+              <h1 className="hcp-page-title">
                 {patient?.name || 'Patient details'}
               </h1>
               <p className="subtitle">Pharmacy patient overview and latest recorded vitals.</p>
             </div>
           </div>
 
-          {isLoading && <p className="text-muted">Loading patient details...</p>}
+          {isLoading && (
+            <div className="loading-state" role="status">
+              <span className="spinner" aria-hidden />
+              Loading patient details…
+            </div>
+          )}
           {error && <div className="error-banner" role="alert">{error}</div>}
 
           {!isLoading && patient && (
@@ -85,11 +90,11 @@ export default function PharmacyPatientDetailPage() {
                 </div>
               </section>
 
-              <section className="panel hcp-panel" style={{ marginTop: 18 }}>
+              <section className="panel hcp-panel">
                 <div className="panel-headline-row">
                   <div>
                     <p className="panel-title">Latest vitals</p>
-                    <p className="text-muted">Most recent readings available for this patient.</p>
+                    <p className="panel-subtitle">Most recent readings available for this patient.</p>
                   </div>
                 </div>
                 {vitals.length > 0 ? (
@@ -97,7 +102,7 @@ export default function PharmacyPatientDetailPage() {
                     {vitals.map((vital, index) => (
                       <div className="metric-summary-card" key={vital.id || `${vital.vitalType}-${index}`}>
                         <p className="block-label">{vital.vitalName || vital.vitalType || 'Vital sign'}</p>
-                        <p>{vital.value ?? 'N/A'} {vital.unit || ''}</p>
+                        <p className="metric-value">{vital.value ?? 'N/A'} <span>{vital.unit || ''}</span></p>
                         <span className="text-muted">{vital.severity || 'No severity recorded'}</span>
                       </div>
                     ))}

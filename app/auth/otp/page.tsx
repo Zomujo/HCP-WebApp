@@ -141,10 +141,9 @@ function OtpPageContent() {
     <main className="auth-page">
       <div className="auth-container">
         <section className="auth-form-shell">
-          <div className="auth-glow" />
-          <div className="auth-brand">
+                    <div className="auth-brand">
             <div className="logo-mark">
-              <Image src="/logo.png" alt="YELIMA logo" width={28} height={28} />
+              <Image src="/logo.png" alt="YELIMA logo" width={44} height={44} />
             </div>
             <div>
               <p className="auth-brand-title">YELIMA</p>
@@ -153,7 +152,7 @@ function OtpPageContent() {
           </div>
 
           <div className="auth-copy">
-            <h1>Enter OTP</h1>
+            <h1>Verify your email</h1>
             <p className="text-muted">
               Enter the 6-digit code sent to {identifier || 'your email'}.
             </p>
@@ -166,7 +165,8 @@ function OtpPageContent() {
                 type="text"
                 value={code}
                 onChange={(event) => setCode(event.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                placeholder="123456"
+                placeholder="••••••"
+                className="otp-input"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 required
@@ -176,7 +176,7 @@ function OtpPageContent() {
 
             <button
               type="submit"
-              className="auth-submit"
+              className="primary auth-submit-button"
               disabled={isSubmitting || isLoading}
             >
               {isSubmitting ? 'Verifying...' : 'Verify OTP'}
@@ -193,33 +193,13 @@ function OtpPageContent() {
           </button>
 
           {notice && (
-            <div
-              style={{
-                padding: '10px 12px',
-                backgroundColor: '#eef9f2',
-                borderRadius: '6px',
-                border: '1px solid #ccead6',
-                color: '#2d7a47',
-                fontSize: '14px',
-                marginBottom: '16px'
-              }}
-            >
+            <div className="alert alert-success" role="status">
               {notice}
             </div>
           )}
 
           {error && (
-            <div
-              style={{
-                padding: '10px 12px',
-                backgroundColor: '#fee',
-                borderRadius: '6px',
-                border: '1px solid #fcc',
-                color: '#c33',
-                fontSize: '14px',
-                marginBottom: '16px'
-              }}
-            >
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}
@@ -229,11 +209,7 @@ function OtpPageContent() {
           </p>
         </section>
 
-        <section className="auth-hero auth-hero-login">
-          <div className="hero-copy">
-            <p>Secure verification keeps your health worker account protected.</p>
-          </div>
-        </section>
+        <section className="auth-hero auth-hero-login" aria-hidden="true" />
       </div>
     </main>
   );

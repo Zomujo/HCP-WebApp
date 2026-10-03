@@ -7,7 +7,7 @@ import { Sidebar } from '../../components/Sidebar';
 import { hcpPatientApi } from '../../lib/api';
 import { formatConditions } from '../../lib/format';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
-import type { Patient, Appointment, Medication } from '../../lib/api';
+import type { Patient, Appointment, Medication, MedicationAdherenceLog } from '../../lib/api';
 import {
   CartesianGrid,
   Line,
@@ -286,12 +286,60 @@ function mergeVitalEntries(logs: any[], latestVitals: any[]): any[] {
   });
 }
 
-function isDoseTaken(record: any): boolean {
-  const entry = Array.isArray(record) ? record[0] : record;
-  if (!entry) return false;
-  if (typeof entry.taken === 'boolean') return entry.taken;
-  const status = String(entry.status ?? entry.adherenceStatus ?? '').toLowerCase();
-  return status === 'taken' || status === 'completed' || status === 'adherent';
+type AdherenceDayStatus = 'taken' | 'missed';
+
+interface AdherenceDay {
+  date: string;
+  label: string;
+  dayOfMonth: number;
+  taken: number;
+  missed: number;
+  status: AdherenceDayStatus;
+}
+
+const ADHERENCE_WINDOW_DAYS = 30;
+const ADHERENCE_STATUS_LABEL: Record<AdherenceDayStatus, string> = {
+  taken: 'Taken',
+  missed: 'Missed',
+};
+
+// Local calendar day, so doses taken late in the evening are not shifted to the next UTC day.
+function toLocalDateKey(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function buildAdherenceDays(logs: MedicationAdherenceLog[]): AdherenceDay[] {
+  const counts = new Map<string, { taken: number; missed: number }>();
+  for (const log of logs) {
+    const takenAt = new Date(log.takenAt);
+    if (Number.isNaN(takenAt.getTime())) continue;
+    const key = toLocalDateKey(takenAt);
+    const entry = counts.get(key) || { taken: 0, missed: 0 };
+    if (log.taken) entry.taken += 1;
+    else entry.missed += 1;
+    counts.set(key, entry);
+  }
+
+  return Array.from({ length: ADHERENCE_WINDOW_DAYS }, (_, index) => {
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - (ADHERENCE_WINDOW_DAYS - 1 - index));
+    const key = toLocalDateKey(day);
+    const { taken, missed } = counts.get(key) || { taken: 0, missed: 0 };
+    // A day only counts as taken when every logged dose was taken; days without a taken dose are missed.
+    const status: AdherenceDayStatus = taken > 0 && missed === 0 ? 'taken' : 'missed';
+
+    return {
+      date: key,
+      label: day.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }),
+      dayOfMonth: day.getDate(),
+      taken,
+      missed,
+      status,
+    };
+  });
 }
 
 function formatAppointmentDate(value?: string): string {
@@ -467,7 +515,11 @@ export default function PatientDetailsPage() {
   const [showAllReadings, setShowAllReadings] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [medications, setMedications] = useState<Medication[]>([]);
-  const [adherenceData, setAdherenceData] = useState<{ date: string; taken: boolean }[]>([]);
+  const [selectedMedicationId, setSelectedMedicationId] = useState<string | null>(null);
+  const [adherenceData, setAdherenceData] = useState<AdherenceDay[]>([]);
+  const [adherenceRate, setAdherenceRate] = useState<number | undefined>(undefined);
+  const [isLoadingAdherence, setIsLoadingAdherence] = useState(false);
+  const [adherenceError, setAdherenceError] = useState('');
   const [messageText, setMessageText] = useState('');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<AppointmentStatusFilter>('all');
@@ -555,40 +607,50 @@ export default function PatientDetailsPage() {
     }
   }, [patientId, useWeekTrends]);
 
-  const primaryMedicationId = medications[0]?.id;
+  const selectedMedication = medications.find((med) => med.id === selectedMedicationId) || medications[0];
+  const activeMedicationId = selectedMedication?.id;
 
   useEffect(() => {
-    if (!patientId || !primaryMedicationId) {
+    if (!patientId || !activeMedicationId) {
       setAdherenceData([]);
+      setAdherenceRate(undefined);
       return;
     }
 
     let cancelled = false;
 
-    // The adherence endpoint returns one day at a time, so build the 30-day window client-side.
-    const days = Array.from({ length: 30 }, (_, index) => {
-      const day = new Date();
-      day.setDate(day.getDate() - (29 - index));
-      return day.toISOString().slice(0, 10);
-    });
+    // The adherence endpoint returns a whole month per call; the 30-day window spans at most two months.
+    const today = new Date();
+    const windowStart = new Date(today);
+    windowStart.setDate(today.getDate() - (ADHERENCE_WINDOW_DAYS - 1));
+    const monthKeys = Array.from(new Set([toLocalDateKey(windowStart), toLocalDateKey(today)].map((key) => key.slice(0, 7))));
+
+    setIsLoadingAdherence(true);
+    setAdherenceError('');
 
     Promise.all(
-      days.map(async (date) => {
-        try {
-          const record = await hcpPatientApi.getMedicationAdherence(patientId, primaryMedicationId, date);
-          return { date, taken: isDoseTaken(record) };
-        } catch {
-          return { date, taken: false };
-        }
+      monthKeys.map((month) => hcpPatientApi.getMedicationAdherence(patientId, activeMedicationId, `${month}-15`))
+    )
+      .then((months) => {
+        if (cancelled) return;
+        setAdherenceData(buildAdherenceDays(months.flatMap((month) => month.logs)));
+        // The current month's rate is the most relevant summary.
+        setAdherenceRate(months[months.length - 1]?.adherenceRate);
       })
-    ).then((results) => {
-      if (!cancelled) setAdherenceData(results);
-    });
+      .catch((err) => {
+        if (cancelled) return;
+        setAdherenceData([]);
+        setAdherenceRate(undefined);
+        setAdherenceError(err instanceof Error ? err.message : 'Failed to load adherence');
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingAdherence(false);
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [patientId, primaryMedicationId]);
+  }, [patientId, activeMedicationId]);
 
   const handleCancelAppointment = async (appointmentId: string) => {
     try {
@@ -793,8 +855,9 @@ export default function PatientDetailsPage() {
         <div className="app-shell">
           <Sidebar />
           <main className="content hcp-page">
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
-              Loading patient details...
+            <div className="loading-state" role="status">
+              <span className="spinner" aria-hidden />
+              Loading patient details…
             </div>
           </main>
         </div>
@@ -808,15 +871,7 @@ export default function PatientDetailsPage() {
         <div className="app-shell">
           <Sidebar />
           <main className="content hcp-page">
-            <div
-              style={{
-                padding: '12px',
-                backgroundColor: '#fee',
-                borderRadius: '6px',
-                border: '1px solid #fcc',
-                color: '#c33',
-              }}
-            >
+            <div className="alert alert-error" role="alert">
               {error || 'Patient not found'}
             </div>
           </main>
@@ -906,8 +961,8 @@ export default function PatientDetailsPage() {
               <h1 className="patient-head-title">
                 {patient.firstName} {patient.lastName}
               </h1>
-              <p className="text-muted" style={{ margin: '4px 0 0' }}>
-                {patient.age} • {formatConditions(patient.chronicConditions)} • Patient since {patient.joined || 'N/A'}
+              <p className="patient-head-meta">
+                {patient.age} yrs · {formatConditions(patient.chronicConditions)} · Patient since {patient.joined || 'N/A'}
               </p>
             </div>
           </section>
@@ -928,22 +983,19 @@ export default function PatientDetailsPage() {
           {activeTab === 'Overview' && (
             <section className="patient-overview-grid">
               <div className="panel hcp-panel">
-                <div className="panel-headline-row" style={{ marginBottom: 12 }}>
+                <div className="panel-headline-row">
                   <p className="panel-title">Patient details</p>
                   {!isEditingPatient && (
                     <button
                       type="button"
+                      className="ghost small"
                       onClick={handleEditPatient}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '1.2rem',
-                        padding: '0 8px',
-                      }}
                       title="Edit patient details"
                     >
-                      ✎
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-4-4L4 16v4z" />
+                      </svg>
+                      Edit
                     </button>
                   )}
                 </div>
@@ -982,8 +1034,8 @@ export default function PatientDetailsPage() {
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <label style={{ display: 'block' }}>
+                  <div className="edit-form">
+                    <label>
                       <span className="block-label">First Name</span>
                       <input
                         type="text"
@@ -992,10 +1044,9 @@ export default function PatientDetailsPage() {
                           setPatientEditForm((prev) => ({ ...prev, firstName: e.target.value }))
                         }
                         placeholder="First name"
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
                       />
                     </label>
-                    <label style={{ display: 'block' }}>
+                    <label>
                       <span className="block-label">Last Name</span>
                       <input
                         type="text"
@@ -1004,10 +1055,9 @@ export default function PatientDetailsPage() {
                           setPatientEditForm((prev) => ({ ...prev, lastName: e.target.value }))
                         }
                         placeholder="Last name"
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
                       />
                     </label>
-                    <label style={{ display: 'block' }}>
+                    <label>
                       <span className="block-label">Age</span>
                       <input
                         type="number"
@@ -1016,10 +1066,9 @@ export default function PatientDetailsPage() {
                           setPatientEditForm((prev) => ({ ...prev, age: Number(e.target.value) }))
                         }
                         placeholder="Age"
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
                       />
                     </label>
-                    <label style={{ display: 'block' }}>
+                    <label>
                       <span className="block-label">Ghana Card</span>
                       <input
                         type="text"
@@ -1028,10 +1077,9 @@ export default function PatientDetailsPage() {
                           setPatientEditForm((prev) => ({ ...prev, ghanaCard: e.target.value }))
                         }
                         placeholder="Ghana Card number"
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
                       />
                     </label>
-                    <label style={{ display: 'block' }}>
+                    <label>
                       <span className="block-label">NHIS</span>
                       <input
                         type="text"
@@ -1040,10 +1088,9 @@ export default function PatientDetailsPage() {
                           setPatientEditForm((prev) => ({ ...prev, nhis: e.target.value }))
                         }
                         placeholder="NHIS number"
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
                       />
                     </label>
-                    <label style={{ display: 'block' }}>
+                    <label>
                       <span className="block-label">Chronic Conditions (comma-separated)</span>
                       <input
                         type="text"
@@ -1058,10 +1105,9 @@ export default function PatientDetailsPage() {
                           }))
                         }
                         placeholder="e.g., hypertension, diabetes"
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
                       />
                     </label>
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+                    <div className="form-actions">
                       <button
                         type="button"
                         onClick={() => setIsEditingPatient(false)}
@@ -1089,7 +1135,7 @@ export default function PatientDetailsPage() {
                     {getBloodPressureSeverity(latestBloodPressure)}
                   </p>
                   <p className="latest-vitals-value">{currentBloodPressure}</p>
-                  <p className="text-muted" style={{ margin: 0 }}>mmHg</p>
+                  <p className="text-muted">mmHg</p>
                 </div>
               </div>
             </section>
@@ -1319,7 +1365,7 @@ export default function PatientDetailsPage() {
                 </div>
                 {readingLog.length > 0 ? (
                   <>
-                    <div className="rd-table-wrap">
+                    <div className="rd-table-wrap stack-on-mobile">
                       <table className="rd-table">
                         <thead>
                           <tr>
@@ -1332,10 +1378,10 @@ export default function PatientDetailsPage() {
                         <tbody>
                           {visibleReadingLog.map((entry, index) => (
                             <tr key={`${entry.type}-${entry.recordedAt}-${entry.value}-${index}`}>
-                              <td className="rd-muted">{formatReadingTimestamp(entry.recordedAt)}</td>
-                              <td><span className={`rd-measure rd-measure-${entry.kind}`}>{entry.type}</span></td>
-                              <td><strong>{entry.value}</strong> <span className="rd-muted">{entry.unit}</span></td>
-                              <td><span className={`rd-pill rd-tone-${entry.status.tone}`}>{entry.status.label}</span></td>
+                              <td className="rd-muted cell-primary">{formatReadingTimestamp(entry.recordedAt)}</td>
+                              <td data-label="Measurement"><span className={`rd-measure rd-measure-${entry.kind}`}>{entry.type}</span></td>
+                              <td data-label="Value"><span><strong>{entry.value}</strong> <span className="rd-muted">{entry.unit}</span></span></td>
+                              <td data-label="Status"><span className={`rd-pill rd-tone-${entry.status.tone}`}>{entry.status.label}</span></td>
                             </tr>
                           ))}
                         </tbody>
@@ -1355,94 +1401,108 @@ export default function PatientDetailsPage() {
           )}
 
           {activeTab === 'Medication' && (
-            <section className="patient-overview-grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) 280px' }}>
+            <section className="patient-overview-grid medication-grid">
               <div className="panel hcp-panel">
-                <div className="panel-headline-row" style={{ marginBottom: 16 }}>
-                  <p className="panel-title">30-day adherence</p>
-                  {patient.adherence && (
-                    <p className="text-muted" style={{ margin: 0 }}>
-                      <strong style={{ color: '#f2994a' }}>{patient.adherence}</strong> overall
+                <div className="panel-headline-row">
+                  <div>
+                    <p className="panel-title">30-day adherence</p>
+                    <p className="panel-subtitle">
+                      {selectedMedication
+                        ? `${selectedMedication.name}${selectedMedication.dose ? ` · ${selectedMedication.dose}` : ''}`
+                        : 'Select a prescription to see its dose history.'}
                     </p>
+                  </div>
+                  {selectedMedication && (adherenceRate !== undefined || patient.adherence) && (
+                    <div className="adherence-rate">
+                      <strong>{adherenceRate !== undefined ? `${Math.round(adherenceRate)}%` : patient.adherence}</strong>
+                      <span>{adherenceRate !== undefined ? 'this month' : 'overall'}</span>
+                    </div>
                   )}
                 </div>
 
-                {patient.adherence && adherenceData.length > 0 ? (
+                {!selectedMedication ? (
+                  <div className="empty-state">
+                    <p className="empty-title">No prescriptions recorded</p>
+                    <p>Adherence appears here once a medication is prescribed.</p>
+                  </div>
+                ) : isLoadingAdherence ? (
+                  <div className="loading-state" role="status">
+                    <span className="spinner" aria-hidden />
+                    Loading adherence…
+                  </div>
+                ) : adherenceError ? (
+                  <div className="alert alert-error" role="alert">{adherenceError}</div>
+                ) : (
                   <>
-                    {/* Adherence Calendar Grid */}
-                    <div style={{ marginBottom: 20 }}>
-                      <div
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(10, 1fr)',
-                          gap: 6,
-                          marginBottom: 12,
-                        }}
-                      >
-                        {adherenceData.map((day) => (
+                    <div className="adherence-stats">
+                      <div><strong>{adherenceData.filter((day) => day.status === 'taken').length}</strong><span>Days taken</span></div>
+                      <div><strong>{adherenceData.filter((day) => day.status === 'missed').length}</strong><span>Missed</span></div>
+                    </div>
+                    <div className="adherence-grid" role="list" aria-label={`Daily adherence for ${selectedMedication.name}`}>
+                      {adherenceData.map((day) => {
+                        const detail = day.taken + day.missed > 0
+                          ? ` (${day.taken} of ${day.taken + day.missed} doses taken)`
+                          : '';
+                        return (
                           <div
                             key={day.date}
-                            style={{
-                              width: '100%',
-                              aspectRatio: '1',
-                              borderRadius: 6,
-                              backgroundColor: day.taken ? '#22c55e' : '#cbd5e1',
-                              transition: 'transform 0.2s',
-                            }}
-                            title={`${day.date}: ${day.taken ? 'Taken' : 'Missed'}`}
-                          />
-                        ))}
-                      </div>
-                      <div style={{ display: 'flex', gap: 12, fontSize: '0.8rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div
-                            style={{
-                              width: 16,
-                              height: 16,
-                              borderRadius: 3,
-                              backgroundColor: '#22c55e',
-                            }}
-                          />
-                          <span>Taken</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div
-                            style={{
-                              width: 16,
-                              height: 16,
-                              borderRadius: 3,
-                              backgroundColor: '#cbd5e1',
-                            }}
-                          />
-                          <span>Missed</span>
-                        </div>
-                      </div>
+                            role="listitem"
+                            className={`adherence-day ${day.status}`}
+                            title={`${day.label}: ${ADHERENCE_STATUS_LABEL[day.status]}${detail}`}
+                            aria-label={`${day.label}: ${ADHERENCE_STATUS_LABEL[day.status]}${detail}`}
+                          >
+                            {day.dayOfMonth}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="adherence-legend">
+                      {(['taken', 'missed'] as const).map((status) => (
+                        <span key={status}><i className={`adherence-day ${status}`} />{ADHERENCE_STATUS_LABEL[status]}</span>
+                      ))}
                     </div>
                   </>
-                ) : patient.adherence && primaryMedicationId ? (
-                  <p className="text-muted">Loading adherence calendar...</p>
-                ) : (
-                  <p className="text-muted">No adherence record available.</p>
                 )}
               </div>
 
-              <div className="panel hcp-panel">
-                <p className="panel-title">Prescription</p>
+              <div className="panel hcp-panel prescriptions-panel">
+                <div className="panel-headline-row">
+                  <p className="panel-title">Prescriptions</p>
+                  {medications.length > 0 && <span className="count-badge">{medications.length}</span>}
+                </div>
                 {medications.length > 0 ? (
-                  medications.slice(0, 2).map((med) => (
-                    <div key={med.id} className="prescription-card">
-                      <p style={{ margin: 0, fontWeight: 700 }}>{med.name}</p>
-                      {(med.dose || med.frequency) && (
-                        <p className="text-muted" style={{ margin: '4px 0 0' }}>
-                          {[med.dose, med.frequency].filter(Boolean).join(' • ')}
-                        </p>
-                      )}
-                      {med.adherence && (
-                        <p style={{ margin: '6px 0 0', color: '#ef6b6b', fontWeight: 700, fontSize: '0.82rem' }}>
-                          Adherence {med.adherence}
-                        </p>
-                      )}
-                    </div>
-                  ))
+                  <div className="prescription-list">
+                    {medications.map((med) => {
+                      const isSelected = med.id === selectedMedication?.id;
+                      return (
+                        <button
+                          key={med.id}
+                          type="button"
+                          className={`prescription-card ${isSelected ? 'selected' : ''}`}
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedMedicationId(med.id)}
+                        >
+                          <span className="prescription-name">{med.name}</span>
+                          {(med.dose || med.frequency) && (
+                            <span className="prescription-meta">
+                              {[med.dose, med.frequency].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                          {(med.quantity !== undefined || med.prescribedBy) && (
+                            <span className="prescription-detail">
+                              {[
+                                med.quantity !== undefined ? `${med.quantity} ${med.quantityUnit || ''}`.trim() : '',
+                                med.prescribedBy ? `By ${med.prescribedBy}` : '',
+                              ].filter(Boolean).join(' · ')}
+                            </span>
+                          )}
+                          {med.adherence && (
+                            <span className="prescription-adherence">Adherence {med.adherence}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <p className="text-muted">No prescriptions recorded.</p>
                 )}
@@ -1452,10 +1512,11 @@ export default function PatientDetailsPage() {
 
           {activeTab === 'Appointments' && (
             <section className="panel hcp-panel">
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="block-label" style={{ margin: 0 }}>Status</span>
+              <div className="panel-toolbar">
+                <p className="panel-title">Appointments</p>
+                <div className="panel-toolbar-actions">
+                  <label className="inline-field">
+                    <span>Status</span>
                     <select
                       value={appointmentStatusFilter}
                       onChange={(event) => setAppointmentStatusFilter(event.target.value as AppointmentStatusFilter)}
@@ -1470,31 +1531,29 @@ export default function PatientDetailsPage() {
                     </select>
                   </label>
                   <button type="button" className="primary small" onClick={() => setIsAppointmentModalOpen(true)}>
-                    + New Appointment
+                    <span aria-hidden>+</span> New appointment
                   </button>
                 </div>
               </div>
 
-              <p className="block-label" style={{ marginBottom: 8 }}>
-                Upcoming
-              </p>
+              <p className="list-section-label">Upcoming</p>
               <div className="list-card">
                 {upcoming.length > 0 ? (
                   upcoming.map((appt) => (
                     <div key={appt.id} className="appointment-row">
-                      <div>
+                      <div className="appointment-body">
                         <p className="appointment-title">{appt.title || appt.type}</p>
-                        <p className="text-muted" style={{ margin: '4px 0 0' }}>
+                        <p className="appointment-meta">
                           {formatAppointmentDate(appt.dateTime)}
                         </p>
                         {appt.note && (
-                          <p className="text-muted" style={{ margin: '4px 0 0' }}>
+                          <p className="appointment-meta">
                             {appt.note}
                           </p>
                         )}
                       </div>
                       <button
-                        className="text-link"
+                        className="ghost small danger-text"
                         type="button"
                         disabled={cancellingId === appt.id}
                         onClick={() => handleCancelAppointment(appt.id)}
@@ -1504,8 +1563,9 @@ export default function PatientDetailsPage() {
                     </div>
                   ))
                 ) : (
-                  <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
-                    No upcoming appointments
+                  <div className="empty-state">
+                    <p className="empty-title">No upcoming appointments</p>
+                    <p>Book a follow-up to keep this patient on track.</p>
                   </div>
                 )}
               </div>
@@ -1521,8 +1581,8 @@ export default function PatientDetailsPage() {
                   >
                     <div className="modal-head-row">
                       <div>
-                        <p className="panel-title" style={{ margin: 0 }}>Set an appointment</p>
-                        <p className="text-muted" style={{ margin: '5px 0 0' }}>
+                        <p className="panel-title">Set an appointment</p>
+                        <p className="modal-subtitle">
                           {patient.firstName} {patient.lastName}
                         </p>
                       </div>
@@ -1562,19 +1622,20 @@ export default function PatientDetailsPage() {
 
               {past.length > 0 && (
                 <>
-                  <p className="block-label" style={{ margin: '16px 0 8px' }}>
-                    Past
-                  </p>
-                  {past.map((appt) => (
-                    <div key={appt.id} className="appointment-row">
-                      <div>
-                        <p className="appointment-title">{appt.title || appt.type}</p>
-                        <p className="text-muted" style={{ margin: '4px 0 0' }}>
-                          {formatAppointmentDate(appt.dateTime)} · {appt.status}
-                        </p>
+                  <p className="list-section-label">Past</p>
+                  <div className="list-card">
+                    {past.map((appt) => (
+                      <div key={appt.id} className="appointment-row">
+                        <div className="appointment-body">
+                          <p className="appointment-title">{appt.title || appt.type}</p>
+                          <p className="appointment-meta">
+                            {formatAppointmentDate(appt.dateTime)}
+                          </p>
+                        </div>
+                        <span className={`status-pill status-${appt.status}`}>{appt.status}</span>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </>
               )}
             </section>

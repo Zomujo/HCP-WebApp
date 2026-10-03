@@ -70,10 +70,9 @@ export default function SignupPage() {
     <main className="auth-page">
       <div className="auth-container">
         <section className="auth-form-shell">
-          <div className="auth-glow" />
-          <div className="auth-brand">
+                    <div className="auth-brand">
             <div className="logo-mark">
-              <Image src="/logo.png" alt="YELIMA logo" width={40} height={40} />
+              <Image src="/logo.png" alt="YELIMA logo" width={44} height={44} />
             </div>
             <div>
               <p className="auth-brand-title">YELIMA</p>
@@ -82,7 +81,7 @@ export default function SignupPage() {
           </div>
 
           <div className="auth-copy">
-            <h1>Create Account</h1>
+            <h1>Create your account</h1>
             <p className="text-muted">Sign up to get started on your health worker journey.</p>
           </div>
 
@@ -136,15 +135,7 @@ export default function SignupPage() {
           </form>
 
           {error && (
-            <div style={{ 
-              padding: '10px 12px', 
-              backgroundColor: '#fee', 
-              borderRadius: '6px',
-              border: '1px solid #fcc',
-              color: '#c33',
-              fontSize: '14px',
-              marginBottom: '16px'
-            }}>
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}
@@ -154,11 +145,7 @@ export default function SignupPage() {
           </p>
         </section>
 
-        <section className="auth-hero auth-hero-signup">
-          <div className="hero-copy">
-            <p>Manage Health Conditions Easier with the help of Health Professionals and AI</p>
-          </div>
-        </section>
+        <section className="auth-hero auth-hero-signup" aria-hidden="true" />
       </div>
     </main>
   );

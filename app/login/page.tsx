@@ -89,10 +89,9 @@ export default function LoginPage() {
     <main className="auth-page">
       <div className="auth-container">
         <section className="auth-form-shell">
-          <div className="auth-glow" />
-          <div className="auth-brand">
+                    <div className="auth-brand">
             <div className="logo-mark">
-              <Image src="/logo.png" alt="YELIMA logo" width={28} height={28} />
+              <Image src="/logo.png" alt="YELIMA logo" width={44} height={44} />
             </div>
             <div>
               <p className="auth-brand-title">YELIMA</p>
@@ -101,8 +100,8 @@ export default function LoginPage() {
           </div>
 
           <div className="auth-copy">
-            <h1>Welcome Back</h1>
-            <p className="text-muted">Welcome back! Please enter your details.</p>
+            <h1>Welcome back</h1>
+            <p className="text-muted">Sign in to manage your patients and appointments.</p>
           </div>
 
           <button 
@@ -147,15 +146,7 @@ export default function LoginPage() {
           </form>
 
           {error && (
-            <div style={{ 
-              padding: '10px 12px', 
-              backgroundColor: '#fee', 
-              borderRadius: '6px',
-              border: '1px solid #fcc',
-              color: '#c33',
-              fontSize: '14px',
-              marginBottom: '16px'
-            }}>
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}
@@ -165,11 +156,7 @@ export default function LoginPage() {
           </p>
         </section>
 
-        <section className="auth-hero auth-hero-login">
-          <div className="hero-copy">
-            <p>Manage Health Conditions Easier with the help of Health Professionals and AI</p>
-          </div>
-        </section>
+        <section className="auth-hero auth-hero-login" aria-hidden="true" />
       </div>
     </main>
   );

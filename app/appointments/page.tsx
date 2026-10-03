@@ -169,73 +169,72 @@ function AppointmentsContent() {
               <h1 className="hcp-page-title">Appointments</h1>
               <p className="subtitle">Set and review appointments for your patients.</p>
             </div>
-            <button className="primary small" onClick={() => setShowModal(true)}>+ Set Appointment</button>
+            <button className="primary small" onClick={() => setShowModal(true)}>
+              <span aria-hidden>+</span> Set appointment
+            </button>
           </div>
 
           {error && (
-            <div style={{ 
-              padding: '12px', 
-              backgroundColor: '#fee', 
-              borderRadius: '6px',
-              border: '1px solid #fcc',
-              color: '#c33',
-              marginBottom: '16px'
-            }}>
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}
 
           {isLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
-              Loading appointments...
+            <div className="loading-state" role="status">
+              <span className="spinner" aria-hidden />
+              Loading appointments…
             </div>
           ) : (
             <div className="appointments-layout">
               <div className="panel hcp-panel">
-                <div className="search-row" style={{ marginBottom: 14 }}>
-                  <input 
-                    type="text" 
-                    placeholder="Search by name"
+                <div className="search-row">
+                  <input
+                    type="search"
+                    className="search-input"
+                    placeholder="Search by patient or title"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                </div>
-
-                <div className="filter-row" style={{ display: 'flex', gap: '12px', marginBottom: 16, flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem' }}>
-                    <span>Time</span>
-                    <select
-                      value={timeFilter}
-                      onChange={(e) => setTimeFilter(e.target.value as 'all' | 'upcoming' | 'past')}
-                      style={{ minWidth: 120 }}
-                    >
-                      <option value="all">All</option>
-                      <option value="upcoming">Upcoming</option>
-                      <option value="past">Past</option>
-                    </select>
-                  </label>
-
+                  <div className="segmented" role="group" aria-label="Filter appointments by time">
+                    {(['upcoming', 'past', 'all'] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={timeFilter === option ? 'active' : ''}
+                        aria-pressed={timeFilter === option}
+                        onClick={() => setTimeFilter(option)}
+                      >
+                        {option === 'all' ? 'All' : option === 'upcoming' ? 'Upcoming' : 'Past'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="list-card">
                   {filteredAppointments.length > 0 ? (
                     filteredAppointments.map((appt) => (
                       <div key={appt.id} className="appointment-row">
-                        <div>
+                        <div className="appointment-date-badge" aria-hidden>
+                          <span>{new Date(appt.dateTime).toLocaleDateString(undefined, { month: 'short' })}</span>
+                          <strong>{new Date(appt.dateTime).getDate()}</strong>
+                        </div>
+                        <div className="appointment-body">
                           <p className="appointment-title">{appt.title || appt.patientName}</p>
-                          <p className="text-muted" style={{ margin: '4px 0 0' }}>
-                            {new Date(appt.dateTime).toLocaleString()} • {appt.patientName}
+                          <p className="appointment-meta">
+                            {new Date(appt.dateTime).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' })} · {appt.patientName}
                           </p>
                           {appt.description && (
-                            <p className="text-muted" style={{ margin: '4px 0 0' }}>Note: {appt.description}</p>
+                            <p className="appointment-meta">Note: {appt.description}</p>
                           )}
                         </div>
-                        <button className="text-link" onClick={() => handleCancelAppointment(appt)}>Cancel</button>
+                        <button className="ghost small danger-text" onClick={() => handleCancelAppointment(appt)}>Cancel</button>
                       </div>
                     ))
                   ) : (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
-                      No appointments found
+                    <div className="empty-state">
+                      <p className="empty-title">No appointments found</p>
+                      <p>Try a different filter or set a new appointment.</p>
                     </div>
                   )}
                 </div>
@@ -247,7 +246,7 @@ function AppointmentsContent() {
             <div className="modal-backdrop" onClick={() => setShowModal(false)}>
               <aside className="panel hcp-panel appointment-modal-preview appointment-modal-overlay" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Set an Appointment">
                 <div className="modal-head-row">
-                  <p className="panel-title" style={{ margin: 0 }}>Set an Appointment</p>
+                  <p className="panel-title">Set an Appointment</p>
                   <button type="button" className="modal-close" aria-label="Close modal" onClick={() => setShowModal(false)}>
                     ×
                   </button>

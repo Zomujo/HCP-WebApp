@@ -218,31 +218,28 @@ export default function PatientsPage() {
               <h1 className="hcp-page-title">Patients</h1>
               <p className="subtitle">{isLoading ? 'Loading...' : `${patients.length} patients in your care.`}</p>
             </div>
-            <button className="primary small" onClick={() => setShowRegisterModal(true)}>+ Add patient</button>
+            <button className="primary small" onClick={() => setShowRegisterModal(true)}>
+              <span aria-hidden>+</span> Add patient
+            </button>
           </div>
 
           {error && (
-            <div style={{ 
-              padding: '12px', 
-              backgroundColor: '#fee', 
-              borderRadius: '6px',
-              border: '1px solid #fcc',
-              color: '#c33',
-              marginBottom: '16px'
-            }}>
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}
 
           {isLoading ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
-              Loading patients...
+            <div className="loading-state" role="status">
+              <span className="spinner" aria-hidden />
+              Loading patients…
             </div>
           ) : (
             <div className="panel hcp-panel">
-              <div className="search-row" style={{ marginBottom: 16 }}>
+              <div className="search-row">
                 <input
-                  type="text"
+                  type="search"
+                  className="search-input"
                   placeholder="Search by name, ID, hosp. number"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
@@ -267,61 +264,65 @@ export default function PatientsPage() {
                 </div>
               </div>
 
-              <table className="table hcp-table hcp-patients-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Age</th>
-                    <th>Condition</th>
-                    <th>Last check-in</th>
-                    <th>Adherence</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedPatients.length > 0 ? (
-                    paginatedPatients.map((patient) => (
-                      <tr
-                        key={patient.id}
-                        onClick={() => router.push(`/patients/${patient.id}`)}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <td>
-                          <div className="table-name-cell">
-                            <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
-                            {patient.firstName} {patient.lastName}
-                          </div>
-                        </td>
-                        <td>{patient.age}</td>
-                        <td>{formatConditions(patient.chronicConditions)}</td>
-                        <td>{patient.lastCheckIn || 'N/A'}</td>
-                        <td className="adherence-cell">{patient.adherence || 'N/A'}</td>
-                        <td>
-                          <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
-                            {patient.status || 'Unknown'}
-                          </span>
-                        </td>
-                        <td className="row-arrow">
-                          <Link
-                            href={`/patients/${patient.id}`}
-                            aria-label={`Open patient details`}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            &gt;
-                          </Link>
+              <div className="table-wrap stack-on-mobile">
+
+                <table className="table hcp-table hcp-patients-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Age</th>
+                      <th>Condition</th>
+                      <th>Last check-in</th>
+                      <th>Adherence</th>
+                      <th>Status</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedPatients.length > 0 ? (
+                      paginatedPatients.map((patient) => (
+                        <tr
+                          key={patient.id}
+                          className="clickable-row"
+                          onClick={() => router.push(`/patients/${patient.id}`)}
+                        >
+                          <td className="cell-primary">
+                            <div className="table-name-cell">
+                              <span className="table-avatar">{getInitials(patient.firstName, patient.lastName)}</span>
+                              {patient.firstName} {patient.lastName}
+                            </div>
+                          </td>
+                          <td data-label="Age">{patient.age}</td>
+                          <td data-label="Condition">{formatConditions(patient.chronicConditions)}</td>
+                          <td data-label="Last check-in">{patient.lastCheckIn || 'N/A'}</td>
+                          <td className="adherence-cell" data-label="Adherence">{patient.adherence || 'N/A'}</td>
+                          <td data-label="Status">
+                            <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
+                              {patient.status || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="row-arrow">
+                            <Link
+                              href={`/patients/${patient.id}`}
+                              aria-label={`Open patient details`}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 6l6 6-6 6" /></svg>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="empty-cell">
+                          No patients found
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                        No patients found
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
+
+              </div>
 
               {filteredPatients.length > pageSize && (
                 <div className="table-pagination-row">
@@ -333,7 +334,7 @@ export default function PatientsPage() {
                   >
                     Previous
                   </button>
-                  <p className="text-muted" style={{ margin: 0 }}>
+                  <p className="text-muted">
                     Page {currentPage} of {totalPages}
                   </p>
                   <button
@@ -359,7 +360,7 @@ export default function PatientsPage() {
                 aria-label="Register patient"
               >
                 <div className="modal-head-row">
-                  <p className="panel-title" style={{ margin: 0 }}>Register patient</p>
+                  <p className="panel-title">Register patient</p>
                   <button
                     type="button"
                     className="modal-close"

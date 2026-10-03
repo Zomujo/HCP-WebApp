@@ -99,6 +99,46 @@ export interface Medication {
   dose: string;
   frequency: string;
   adherence?: string;
+  quantity?: number;
+  quantityUnit?: string;
+  prescribedBy?: string;
+}
+
+export interface MedicationAdherenceLog {
+  id: string;
+  takenAt: string;
+  taken: boolean;
+}
+
+export interface MedicationAdherenceMonth {
+  medicationName?: string;
+  adherenceRate?: number;
+  logs: MedicationAdherenceLog[];
+}
+
+const FREQUENCY_UNITS: Record<string, [string, string]> = {
+  hourly: ['Hourly', 'hours'],
+  daily: ['Daily', 'days'],
+  weekly: ['Weekly', 'weeks'],
+  monthly: ['Monthly', 'months'],
+  yearly: ['Yearly', 'years'],
+};
+
+function formatFrequency(freq: any): string {
+  if (!freq) return '';
+  if (typeof freq !== 'object') return String(freq);
+  const [single, plural] = FREQUENCY_UNITS[freq.repetitionType] || ['', freq.repetitionType || 'day(s)'];
+  const every = Number(freq.repeatEvery);
+  if (!Number.isFinite(every) || every <= 1) return single || `Every ${plural}`;
+  return `Every ${every} ${plural}`;
+}
+
+// The backend types `taken` loosely, so accept booleans, numbers and strings.
+function isTakenFlag(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value > 0;
+  if (typeof value === 'string') return ['true', 'taken', 'yes', '1', 'completed'].includes(value.toLowerCase());
+  return false;
 }
 
 export interface PharmacyAnalytics {
@@ -803,25 +843,20 @@ export const hcpPatientApi = {
 
   getPatientMedications: async (patientId: string): Promise<Medication[]> => {
     const response = await apiCall<ApiResponse<any>>(
-      `/api/v1/hcp/patients/${patientId}/medications`,
+      `/api/v1/hcp/patients/${patientId}/medications?page=1&pageSize=100`,
       'GET'
     );
 
-    return extractArray<any>(response.data).map((med: any) => {
-      const freq = med.frequency;
-      const frequencyLabel =
-        typeof freq === 'object' && freq
-          ? `Every ${freq.repeatEvery} ${freq.repetitionType || 'day(s)'}`
-          : freq || '';
-
-      return {
-        id: med.id,
-        name: med.name,
-        dose: med.dosage || med.dose || '',
-        frequency: frequencyLabel,
-        adherence: med.adherence,
-      };
-    });
+    return extractArray<any>(response.data).map((med: any) => ({
+      id: med.id,
+      name: med.name,
+      dose: med.dosage || med.dose || '',
+      frequency: formatFrequency(med.frequency),
+      adherence: med.adherence,
+      quantity: typeof med.quantity === 'number' ? med.quantity : undefined,
+      quantityUnit: med.quantityUnit,
+      prescribedBy: med.prescribedBy,
+    }));
   },
 
   getPatientVitals: async (patientId: string): Promise<any> => {
@@ -872,16 +907,30 @@ export const hcpPatientApi = {
     return response.data;
   },
 
+  /** Returns every dose log for the month containing `date` (any YYYY-MM-DD in that month). */
   getMedicationAdherence: async (
     patientId: string,
     medicationId: string,
     date: string
-  ): Promise<any> => {
+  ): Promise<MedicationAdherenceMonth> => {
     const response = await apiCall<ApiResponse<any>>(
       `/api/v1/hcp/patients/${patientId}/medications/${medicationId}/adherence?date=${encodeURIComponent(date)}`,
       'GET'
     );
-    return response.data;
+    const data = response.data || {};
+    const rawLogs = Array.isArray(data) ? data : Array.isArray(data.logs) ? data.logs : [];
+
+    return {
+      medicationName: data.medicationName,
+      adherenceRate: typeof data.adherenceRate === 'number' ? data.adherenceRate : undefined,
+      logs: rawLogs
+        .map((log: any) => ({
+          id: String(log.id ?? log._id ?? ''),
+          takenAt: log.takenAt || log.date || log.createdAt || '',
+          taken: isTakenFlag(log.taken ?? log.status),
+        }))
+        .filter((log: MedicationAdherenceLog) => log.takenAt),
+    };
   },
 
   updateVitalLog: async (

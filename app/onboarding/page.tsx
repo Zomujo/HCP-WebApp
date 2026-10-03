@@ -181,7 +181,7 @@ export default function OnboardingPage() {
             />
           </label>
 
-          <p className="onboarding-section-title" style={{ marginTop: 8 }}>Professional Information</p>
+          <p className="onboarding-section-title spaced">Professional Information</p>
           <label>
             <span className="onboarding-field-label">Nurse Registration Number</span>
             <input 
@@ -253,7 +253,9 @@ export default function OnboardingPage() {
     <main className="onboarding-page">
       <div className="onboarding-stage">
         <div className="onboarding-brand">
-          <Image src="/logo.png" alt="YELIMA logo" width={22} height={22} />
+          <div className="logo-mark">
+            <Image src="/logo.png" alt="YELIMA logo" width={40} height={40} />
+          </div>
           <span>YELIMA</span>
         </div>
 
@@ -267,8 +269,8 @@ export default function OnboardingPage() {
 
             <div className="onboarding-steps-row">
               {stepLabels.map((label, index) => (
-                <div key={label} className={`onboarding-step-chip ${index === activeStep ? 'active' : ''}`}>
-                  <span className="onboarding-step-dot">{index + 1}</span>
+                <div key={label} className={`onboarding-step-chip ${index === activeStep ? 'active' : ''} ${index < activeStep ? 'done' : ''}`}>
+                  <span className="onboarding-step-dot">{index < activeStep ? '✓' : index + 1}</span>
                   {label}
                 </div>
               ))}
@@ -276,15 +278,7 @@ export default function OnboardingPage() {
           </header>
 
           {error && (
-            <div style={{ 
-              padding: '10px 12px', 
-              backgroundColor: '#fee', 
-              borderRadius: '6px',
-              border: '1px solid #fcc',
-              color: '#c33',
-              fontSize: '14px',
-              marginBottom: '16px'
-            }}>
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}

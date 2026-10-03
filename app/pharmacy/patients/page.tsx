@@ -69,85 +69,83 @@ export default function PharmacyPatientsPage() {
           </div>
 
           {error && (
-            <div style={{
-              padding: '12px',
-              backgroundColor: '#fee',
-              borderRadius: '6px',
-              border: '1px solid #fcc',
-              color: '#c33',
-              marginBottom: '16px'
-            }}>
+            <div className="alert alert-error" role="alert">
               {error}
             </div>
           )}
 
           <section className="panel hcp-panel">
-            <div className="panel-headline-row" style={{ marginBottom: 16 }}>
+            <div className="panel-headline-row">
               <div>
-                <p className="panel-title">Patients Overview</p>
-                <p className="text-muted">{isLoading ? 'Loading...' : `${filteredPatients.length} patients available`}</p>
+                <p className="panel-title">Patients overview</p>
+                <p className="panel-subtitle">{isLoading ? 'Loading...' : `${filteredPatients.length} patients available`}</p>
               </div>
             </div>
 
-            <div className="search-row" style={{ marginBottom: 16 }}>
+            <div className="search-row">
               <input
-                type="text"
+                type="search"
+                className="search-input"
                 placeholder="Search by name or Ghana Card"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
             </div>
 
-            <table className="table hcp-table pharmacy-patients-table">
-              <thead>
-                <tr>
-                  <th>Patient</th>
-                  <th>Patient Code</th>
-                  <th>Age</th>
-                  <th>Gender</th>
-                  <th>Condition</th>
-                  <th>Adherence</th>
-                  <th>Facility</th>
-                  <th>BMI</th>
-                </tr>
-              </thead>
-              <tbody>
-                {isLoading ? (
+            <div className="table-wrap stack-on-mobile">
+
+              <table className="table hcp-table pharmacy-patients-table">
+                <thead>
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                      Loading patients...
-                    </td>
+                    <th>Patient</th>
+                    <th>Patient Code</th>
+                    <th>Age</th>
+                    <th>Gender</th>
+                    <th>Condition</th>
+                    <th>Adherence</th>
+                    <th>Facility</th>
+                    <th>BMI</th>
                   </tr>
-                ) : filteredPatients.length > 0 ? (
-                  filteredPatients.map((patient) => (
-                  <tr key={patient.id}>
-                    <td>
-                      <Link href={`/pharmacy/patients/${patient.id}`} className="table-name-cell">
-                        <span className="table-avatar">{getInitials(patient.name)}</span>
-                        {patient.name || `${patient.firstName} ${patient.lastName}`}
-                      </Link>
-                    </td>
-                    <td>{patient.patientCode || 'N/A'}</td>
-                    <td>{patient.age}</td>
-                    <td>{patient.gender || 'N/A'}</td>
-                    <td>{formatConditions(patient.chronicConditions)}</td>
-                    <td>
-                      <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
-                        {patient.adherence || patient.status || 'N/A'}
-                      </span>
-                    </td>
-                    <td>{patient.facility || 'N/A'}</td>
-                    <td>{patient.bmi ?? 'N/A'}</td>
-                  </tr>
-                ))) : (
-                  <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                      No patients found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={8} className="empty-cell">
+                        Loading patients...
+                      </td>
+                    </tr>
+                  ) : filteredPatients.length > 0 ? (
+                    filteredPatients.map((patient) => (
+                    <tr key={patient.id}>
+                      <td className="cell-primary">
+                        <Link href={`/pharmacy/patients/${patient.id}`} className="table-name-cell">
+                          <span className="table-avatar">{getInitials(patient.name)}</span>
+                          {patient.name || `${patient.firstName} ${patient.lastName}`}
+                        </Link>
+                      </td>
+                      <td data-label="Patient code">{patient.patientCode || 'N/A'}</td>
+                      <td data-label="Age">{patient.age}</td>
+                      <td data-label="Gender">{patient.gender || 'N/A'}</td>
+                      <td data-label="Condition">{formatConditions(patient.chronicConditions)}</td>
+                      <td data-label="Adherence">
+                        <span className={`status-pill status-${(patient.status || 'unknown').toLowerCase()}`}>
+                          {patient.adherence || patient.status || 'N/A'}
+                        </span>
+                      </td>
+                      <td data-label="Facility">{patient.facility || 'N/A'}</td>
+                      <td data-label="BMI">{patient.bmi ?? 'N/A'}</td>
+                    </tr>
+                  ))) : (
+                    <tr>
+                      <td colSpan={8} className="empty-cell">
+                        No patients found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+            </div>
           </section>
         </main>
       </div>
