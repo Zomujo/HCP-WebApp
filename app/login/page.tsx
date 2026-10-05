@@ -13,6 +13,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, loginWithGoogle, isLoading, isAuthenticated, user } = useAuth();
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,11 +45,23 @@ export default function LoginPage() {
         }
       }
 
+      if (err instanceof ApiError && err.status >= 500) {
+        // The backend errors (rather than returning 401) for accounts that were deleted.
+        setError("We couldn't sign you in with this account. If it was recently deleted, please sign up to create a new one.");
+        return;
+      }
+
       setError(err instanceof Error ? err.message : 'Sign in failed');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('setup') === 'complete') {
+      setNotice('Your account is set up. Sign in again to open your dashboard.');
+    }
+  }, []);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -144,6 +157,10 @@ export default function LoginPage() {
               {isSubmitting ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+
+          {notice && !error && (
+            <div className="alert alert-success" role="status">{notice}</div>
+          )}
 
           {error && (
             <div className="alert alert-error" role="alert">

@@ -115,7 +115,9 @@ export function Sidebar() {
 
   const navItems = user?.role === 'pharmacy-personnel' ? pharmacyNavItems : healthWorkerNavItems;
   const roleLabel = user?.role === 'pharmacy-personnel' ? 'Pharmacy Personnel' : 'HCP portal';
-  const facilityName = user?.facility?.name || 'Primary Facility';
+  const isPharmacy = user?.role === 'pharmacy-personnel';
+  // Pharmacy personnel are not attached to a facility, so show their role instead.
+  const facilityName = user?.facility?.name || (isPharmacy ? 'Pharmacy' : 'No facility assigned');
   const userName = user
     ? `${user.firstName || user.email?.split('@')[0] || 'User'}${user.lastName ? ` ${user.lastName}` : ''}`
     : 'User';

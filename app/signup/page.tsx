@@ -11,7 +11,7 @@ import { ROLE_CONFIG } from '../lib/config';
 
 export default function SignupPage() {
   const router = useRouter();
-  const { signup, loginWithGoogle, isLoading } = useAuth();
+  const { signup, loginWithGoogle, applySignupRole, isLoading } = useAuth();
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [email, setEmail] = useState('');
@@ -50,6 +50,8 @@ export default function SignupPage() {
           setError('');
           const loggedInUser = await loginWithGoogle(token);
           if (loggedInUser.needsOnboarding) {
+            // Google sign-up skips the email form, so apply the selected account type here.
+            applySignupRole(role, loggedInUser);
             router.push('/onboarding');
             return;
           }

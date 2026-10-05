@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '../lib/AuthContext';
+import { SignInAgainError, useAuth } from '../lib/AuthContext';
 import { facilityApi, normalizePhoneNumber } from '../lib/api';
 import { ROLE_CONFIG } from '../lib/config';
 
@@ -102,6 +102,10 @@ export default function OnboardingPage() {
 
         router.push(ROLE_CONFIG[user.role].defaultRoute);
       } catch (err) {
+        if (err instanceof SignInAgainError) {
+          router.replace('/login?setup=complete');
+          return;
+        }
         const rawMessage = err instanceof Error ? err.message : 'Onboarding failed. Please try again.';
         if (rawMessage.toLowerCase().includes('username') && rawMessage.toLowerCase().includes('already in use')) {
           setError('That full name is already taken on the server. Please go back and slightly change your first or last name (for example add an initial) and submit again.');

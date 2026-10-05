@@ -35,7 +35,7 @@ function readPendingOtpContext(): PendingOtpContext | null {
 function OtpPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isLoading } = useAuth();
+  const { login, applySignupRole, isLoading } = useAuth();
 
   const queryFlow = searchParams.get('flow');
   const queryIdentifier = searchParams.get('identifier') || '';
@@ -54,8 +54,13 @@ function OtpPageContent() {
 
   const completeVerificationFlow = async (pendingContext: PendingOtpContext | null) => {
     if (pendingContext?.password) {
-      const loggedInUser = await login(identifier, pendingContext.password);
+      let loggedInUser = await login(identifier, pendingContext.password);
       sessionStorage.removeItem(PENDING_OTP_CONTEXT_KEY);
+
+      // The backend only learns the account type at onboarding, so carry the sign-up choice forward.
+      if (pendingContext.role && loggedInUser.needsOnboarding) {
+        loggedInUser = applySignupRole(pendingContext.role, loggedInUser) ?? loggedInUser;
+      }
 
       if (flow === 'signup' || loggedInUser.needsOnboarding) {
         router.push('/onboarding');

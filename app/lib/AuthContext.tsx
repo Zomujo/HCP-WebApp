@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { authApi, AuthResponse } from './api';
+import { authApi, AuthResponse, forgetSignupRole, rememberSignupRole, resolvePortalRole } from './api';
 
 interface User {
   id: string;
@@ -37,6 +37,8 @@ interface AuthContextType {
     facilityId?: string | null;
     facilityName?: string;
   }) => Promise<User>;
+  /** Applies the account type picked at sign-up to a user who has not onboarded yet. */
+  applySignupRole: (role: 'health-worker' | 'pharmacy-personnel', baseUser?: User) => User | null;
   logout: () => void;
   resetAccount: () => void;
 }
@@ -50,12 +52,23 @@ function isLikelyJwt(token: string): boolean {
   return typeof token === 'string' && token.split('.').length === 3;
 }
 
+/** Thrown when onboarding succeeded but a fresh, role-bearing token could not be obtained automatically. */
+export class SignInAgainError extends Error {
+  constructor() {
+    super('Your account is set up. Please sign in again to continue.');
+    this.name = 'SignInAgainError';
+  }
+}
+
 function persistAuth(response: AuthResponse) {
   localStorage.setItem('hcp-auth-token', response.token);
   localStorage.setItem('hcp-user', JSON.stringify(response.user));
   localStorage.setItem('hcp-user-role', response.user.role);
   localStorage.removeItem(PENDING_USER_KEY);
-  sessionStorage.removeItem(PENDING_CREDENTIALS_KEY);
+  // Credentials are kept (session tab only) until onboarding is done, to fetch a role-bearing token afterwards.
+  if (!response.user.needsOnboarding) {
+    sessionStorage.removeItem(PENDING_CREDENTIALS_KEY);
+  }
 }
 
 function persistPendingUser(user: User) {
@@ -148,7 +161,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const current = await authApi.getCurrent();
           const names = splitUserName(current?.userName);
-          const resolvedRole = parsedUser?.role || 'health-worker';
+          // Re-derive the role from the profile so a previously cached wrong role is corrected.
+          const resolvedRole = resolvePortalRole({
+            profile: current,
+            email: current?.email || parsedUser?.email,
+            fallback: parsedUser?.role,
+          });
           const pharmacyProfileComplete = resolvedRole === 'pharmacy-personnel' && Boolean(
             current?.userName || current?.firstname || current?.firstName || current?.pharmacyName || current?.phoneNumber
           );
@@ -200,6 +218,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       const response = await authApi.login(email, password);
+      if (response.user.needsOnboarding) {
+        persistPendingCredentials(email, password);
+      }
       applyAuth(response);
       return response.user;
     } finally {
@@ -245,18 +266,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       const response = await authApi.onboard(data);
 
-      if (response.token && isLikelyJwt(response.token)) {
+      // Only a token issued by onboarding carries the new role; reusing the pre-onboarding token
+      // makes role-guarded endpoints (e.g. pharmacy) answer 403 Forbidden.
+      if (response.tokenRefreshed && isLikelyJwt(response.token)) {
         applyAuth(response);
         return response.user;
       }
 
       const pendingCredentials = readPendingCredentials();
       if (!pendingCredentials) {
-        clearPendingOnboarding();
-        throw new Error('Onboarding completed. Please sign in with your email and password to continue.');
+        logout();
+        throw new SignInAgainError();
       }
 
       const loggedIn = await authApi.login(pendingCredentials.email, pendingCredentials.password);
+      forgetSignupRole(pendingCredentials.email);
       applyAuth({
         ...loggedIn,
         user: {
@@ -276,6 +300,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Pass the user returned by login when calling straight after it: React state is not updated yet.
+  const applySignupRole = (role: 'health-worker' | 'pharmacy-personnel', baseUser?: User) => {
+    const current = baseUser ?? user ?? readPendingUser();
+    if (!current || !current.needsOnboarding) return current;
+
+    const updated: User = { ...current, role };
+    rememberSignupRole(updated.email, role);
+    if (localStorage.getItem('hcp-auth-token')) {
+      localStorage.setItem('hcp-user', JSON.stringify(updated));
+      localStorage.setItem('hcp-user-role', role);
+    } else {
+      persistPendingUser(updated);
+    }
+    setUser(updated);
+    return updated;
   };
 
   const logout = () => {
@@ -306,6 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginWithGoogle,
     signup,
     onboard,
+    applySignupRole,
     logout,
     resetAccount,
   };

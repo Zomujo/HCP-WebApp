@@ -11,6 +11,8 @@ export interface ApiResponse<T> {
   statusCode?: number;
 }
 
+export const SERVER_ERROR_MESSAGE = 'Something went wrong on our side. Please try again in a moment.';
+
 export class ApiError extends Error {
   status: number;
 
@@ -37,6 +39,8 @@ export interface AuthResponse {
     };
     needsOnboarding?: boolean;
   };
+  /** Set by onboarding: false when the backend did not issue a new token for the new role. */
+  tokenRefreshed?: boolean;
 }
 
 export interface Patient {
@@ -59,6 +63,8 @@ export interface Patient {
   nhis?: string;
   facility?: string;
   joined?: string;
+  dateOfBirth?: string;
+  phoneNumber?: string;
   criticalReadingsCount?: number;
   assignedToYou?: boolean;
   vitals?: {
@@ -145,6 +151,60 @@ export interface PharmacyAnalytics {
   patientsCount: number;
   vitalsRecordedCount: number;
   referralsCount: number;
+}
+
+export interface VitalReadingInput {
+  vitalType: string;
+  value: string;
+  unit: string;
+  severity?: 'normal' | 'elevated' | 'critical';
+}
+
+/** One visit's worth of readings (a vital history entry). */
+export interface VitalEntry {
+  id: string;
+  patientId: string;
+  recordedAt: string;
+  notes?: string;
+  vitals: VitalReadingInput[];
+}
+
+export interface CreatePatientInput {
+  ghanaCardNumber: string;
+  nhisNumber: string;
+  phoneNumber: string;
+  dateOfBirth: string;
+  gender: 'male' | 'female' | 'other';
+  chronicConditions: string[];
+  firstname: string;
+  lastname: string;
+  age: number;
+}
+
+// Entries may arrive with `vitals` as an array, a single object, or flattened onto the row.
+function normalizeVitalEntry(row: any, fallbackPatientId = ''): VitalEntry {
+  const rawVitals = Array.isArray(row?.vitals)
+    ? row.vitals
+    : row?.vitals && typeof row.vitals === 'object'
+      ? [row.vitals]
+      : row?.vitalType
+        ? [{ vitalType: row.vitalType, value: row.value, unit: row.unit, severity: row.severity }]
+        : [];
+
+  return {
+    id: String(row?.id ?? row?._id ?? ''),
+    patientId: String(row?.patientId ?? row?.patient?.id ?? fallbackPatientId),
+    recordedAt: row?.recordedAt || row?.createdAt || '',
+    notes: row?.notes || undefined,
+    vitals: rawVitals
+      .filter((vital: any) => vital && vital.vitalType)
+      .map((vital: any) => ({
+        vitalType: String(vital.vitalType),
+        value: String(vital.value ?? ''),
+        unit: String(vital.unit ?? ''),
+        severity: vital.severity,
+      })),
+  };
 }
 
 export interface PharmacyVitalHistory {
@@ -235,6 +295,13 @@ function deriveAge(raw: any): number {
   return 0;
 }
 
+function formatJoinedDate(value?: string): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+
 function mapPatient(raw: any): Patient {
   const name = raw.name || [raw.firstName, raw.lastName].filter(Boolean).join(' ') || 'Unknown';
   const { firstName, lastName } = raw.firstName
@@ -265,12 +332,15 @@ function mapPatient(raw: any): Patient {
     adherence,
     status: capitalizeStatus(raw.adherenceStatus || raw.status),
     patientCode: raw.patientCode,
-    gender: raw.gender,
+    gender: raw.gender || raw.sex,
     height: typeof raw.height === 'number' ? raw.height : undefined,
     weight: typeof raw.weight === 'number' ? raw.weight : undefined,
     bmi: typeof raw.bmi === 'number' ? raw.bmi : undefined,
     ghanaCard: raw.ghanaCardNumber || raw.ghanaCard,
     nhis: raw.nhisNumber || raw.nhis,
+    dateOfBirth: raw.dateOfBirth,
+    phoneNumber: raw.phoneNumber,
+    joined: formatJoinedDate(raw.createdAt || raw.created_at || raw.registeredAt || raw.joined),
     facility: raw.facility?.name || raw.facility,
     criticalReadingsCount: typeof raw.criticalReadingsCount === 'number' ? raw.criticalReadingsCount : undefined,
     assignedToYou: typeof raw.assignedToYou === 'boolean' ? raw.assignedToYou : undefined,
@@ -278,11 +348,52 @@ function mapPatient(raw: any): Patient {
   };
 }
 
-function mapRole(role?: string): 'health-worker' | 'pharmacy-personnel' {
-  if (role === 'pharmacy-personnel' || role === 'pharmacy') {
-    return 'pharmacy-personnel';
-  }
-  return 'health-worker';
+type PortalRole = 'health-worker' | 'pharmacy-personnel';
+
+const SIGNUP_ROLE_KEY_PREFIX = 'hcp-signup-role:';
+
+function normalizeRole(role?: unknown): PortalRole | null {
+  if (typeof role !== 'string') return null;
+  const value = role.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  if (['pharmacy', 'pharmacist', 'pharmacy-personnel'].includes(value)) return 'pharmacy-personnel';
+  if (['clinician', 'hcp', 'health-worker', 'healthcare-worker', 'nurse', 'doctor'].includes(value)) return 'health-worker';
+  return null;
+}
+
+/**
+ * The role picked at sign-up is only sent to the backend during onboarding, so it is
+ * remembered locally (per email) until then.
+ */
+export function rememberSignupRole(email: string, role: PortalRole) {
+  if (typeof window === 'undefined' || !email) return;
+  localStorage.setItem(`${SIGNUP_ROLE_KEY_PREFIX}${email.trim().toLowerCase()}`, role);
+}
+
+export function forgetSignupRole(email?: string) {
+  if (typeof window === 'undefined' || !email) return;
+  localStorage.removeItem(`${SIGNUP_ROLE_KEY_PREFIX}${email.trim().toLowerCase()}`);
+}
+
+function readSignupRole(email?: string): PortalRole | null {
+  if (typeof window === 'undefined' || !email) return null;
+  return normalizeRole(localStorage.getItem(`${SIGNUP_ROLE_KEY_PREFIX}${email.trim().toLowerCase()}`));
+}
+
+/**
+ * Neither /auth/login nor /auth/current returns a role, so resolve it in order of trust:
+ * an explicit role (JWT or profile), then the profile shape (health workers must pick a
+ * facility during onboarding, pharmacy personnel never do), then the role chosen at sign-up.
+ */
+export function resolvePortalRole(options: { jwtPayload?: any; profile?: any; email?: string; fallback?: PortalRole }): PortalRole {
+  const { jwtPayload, profile, email, fallback } = options;
+  const explicit = normalizeRole(jwtPayload?.role) || normalizeRole(profile?.role) || normalizeRole(profile?.personnel?.role);
+  if (explicit) return explicit;
+
+  if (profile?.facility) return 'health-worker';
+  const isOnboarded = Boolean(profile?.userName || profile?.firstname || profile?.firstName || profile?.pharmacyName || profile?.phoneNumber);
+  if (isOnboarded) return 'pharmacy-personnel';
+
+  return readSignupRole(email || profile?.email || jwtPayload?.email) || fallback || 'health-worker';
 }
 
 function hasCompletedOnboarding(profile: any, role: 'health-worker' | 'pharmacy-personnel'): boolean {
@@ -319,7 +430,7 @@ function getStoredJwt(): string {
   return token && isLikelyJwt(token) ? token : '';
 }
 
-function authFromToken(token: string, profile?: any, fallbackToken?: string): AuthResponse {
+function authFromToken(token: string, profile?: any, fallbackToken?: string, emailHint?: string): AuthResponse {
   const resolvedToken = isLikelyJwt(token)
     ? token
     : fallbackToken && isLikelyJwt(fallbackToken)
@@ -338,7 +449,7 @@ function authFromToken(token: string, profile?: any, fallbackToken?: string): Au
   const userName = profile?.userName || '';
   const { firstName, lastName } = splitName(userName);
 
-  const role = mapRole(jwtPayload.role || profile?.role);
+  const role = resolvePortalRole({ jwtPayload, profile, email: emailHint });
 
   return {
     token: resolvedToken,
@@ -449,7 +560,13 @@ async function apiCall<T>(
         window.location.href = '/login';
       }
     }
-    throw new ApiError(await parseErrorMessage(response), response.status);
+    const message = await parseErrorMessage(response);
+    if (response.status >= 500) {
+      // Server crashes leak internals (e.g. "Cannot read properties of null"); keep them out of the UI.
+      console.error(`API ${method} ${endpoint} failed with ${response.status}:`, message);
+      throw new ApiError(SERVER_ERROR_MESSAGE, response.status);
+    }
+    throw new ApiError(message, response.status);
   }
 
   // Some endpoints may return empty bodies
@@ -486,7 +603,7 @@ export const authApi = {
 
     try {
       const profile = await authApi.getCurrent();
-      const auth = authFromToken(authPayload.token, profile);
+      const auth = authFromToken(authPayload.token, profile, undefined, email);
       return {
         ...auth,
         user: {
@@ -495,7 +612,7 @@ export const authApi = {
         },
       };
     } catch {
-      const auth = authFromToken(authPayload.token);
+      const auth = authFromToken(authPayload.token, undefined, undefined, email);
       return {
         ...auth,
         user: {
@@ -589,6 +706,8 @@ export const authApi = {
       throw new Error(response.message || 'Signup failed: no token returned');
     }
 
+    rememberSignupRole(data.email, data.role);
+
     if (!authPayload.token || !isLikelyJwt(authPayload.token)) {
       return {
         token: '',
@@ -606,13 +725,14 @@ export const authApi = {
       localStorage.setItem('hcp-auth-token', authPayload.token);
     }
 
-    const auth = authFromToken(authPayload.token);
+    const auth = authFromToken(authPayload.token, undefined, undefined, data.email);
     return {
       ...auth,
       user: {
         ...auth.user,
         personnelId: authPayload.personnelId || auth.user.personnelId,
         email: data.email,
+        role: data.role,
         needsOnboarding: true,
       },
     };
@@ -659,13 +779,19 @@ export const authApi = {
 
     const existingJwt = getStoredJwt();
 
+    // A token issued before onboarding carries no role, so role-guarded endpoints reject it (403).
+    const tokenRefreshed = isLikelyJwt(response.data);
+
     try {
       const profile = await authApi.getCurrent();
-      return authFromToken(response.data, profile, existingJwt);
+      const auth = authFromToken(response.data, profile, existingJwt);
+      forgetSignupRole(profile?.email);
+      return { ...auth, tokenRefreshed, user: { ...auth.user, role: data.role } };
     } catch {
       const auth = authFromToken(response.data, undefined, existingJwt);
       return {
         ...auth,
+        tokenRefreshed,
         user: {
           ...auth.user,
           personnelId: data.personnelId || auth.user.personnelId,
@@ -1042,19 +1168,118 @@ export const pharmacyPatientApi = {
     return extractArray<any>(response.data);
   },
 
-  getVitalHistories: async (page = 1, pageSize = 10): Promise<PharmacyVitalHistory[]> => {
+  /**
+   * Total patients from the list endpoint's pagination. Used for the dashboard count because
+   * /pharmacies/analytics `patientsCount` has been observed to disagree with the list (e.g. 0 vs 28).
+   */
+  getPatientCount: async (): Promise<number> => {
+    const response = await apiCall<ApiResponse<any>>('/api/v1/personnel/pharmacies/patients?page=1&pageSize=1', 'GET');
+    const total = Number(response.data?.total);
+    return Number.isFinite(total) ? total : extractArray<any>(response.data).length;
+  },
+
+  createPatient: async (data: CreatePatientInput): Promise<string> => {
+    const response = await apiCall<ApiResponse<string | { id?: string; _id?: string }>>(
+      '/api/v1/personnel/pharmacies/patients',
+      'POST',
+      data
+    );
+    if (typeof response.data === 'string') return response.data;
+    return response.data?.id || response.data?._id || '';
+  },
+
+  /**
+   * A patient's vital history, newest first. The list endpoint may omit the readings
+   * themselves, in which case each entry is loaded individually.
+   */
+  getVitalLog: async (patientId: string, pageSize = 50): Promise<VitalEntry[]> => {
+    const params = new URLSearchParams({ patientId, page: '1', pageSize: String(pageSize) });
     const response = await apiCall<ApiResponse<any>>(
-      `/api/v1/personnel/pharmacies/vital-histories?page=${page}&pageSize=${pageSize}`,
+      `/api/v1/personnel/pharmacies/vital-histories?${params.toString()}`,
+      'GET'
+    );
+    const entries = extractArray<any>(response.data).map((row) => normalizeVitalEntry(row, patientId));
+
+    const detailed = await Promise.all(
+      entries.map(async (entry) => {
+        if (entry.vitals.length > 0 || !entry.id) return entry;
+        try {
+          return await pharmacyPatientApi.getVitalEntry(entry.id);
+        } catch {
+          return entry;
+        }
+      })
+    );
+
+    return detailed.sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime());
+  },
+
+  getVitalEntry: async (id: string): Promise<VitalEntry> => {
+    const response = await apiCall<ApiResponse<any>>(`/api/v1/personnel/pharmacies/vital-histories/${id}`, 'GET');
+    return normalizeVitalEntry(response.data);
+  },
+
+  createVitalEntry: async (data: { patientId: string; recordedAt: string; notes?: string; vitals: VitalReadingInput[] }) => {
+    const response = await apiCall<ApiResponse<any>>('/api/v1/personnel/pharmacies/vital-histories', 'POST', data);
+    return response.data;
+  },
+
+  updateVitalEntry: async (id: string, data: { recordedAt?: string; notes?: string; vitals?: VitalReadingInput[] }) => {
+    const response = await apiCall<ApiResponse<any>>(`/api/v1/personnel/pharmacies/vital-histories/${id}`, 'PATCH', data);
+    return response.data;
+  },
+
+  deleteVitalEntry: async (id: string): Promise<void> => {
+    await apiCall<ApiResponse<unknown>>(`/api/v1/personnel/pharmacies/vital-histories/${id}`, 'DELETE');
+  },
+
+
+  /** The backend only serves vital histories per patient (`patientId` is required). */
+  getVitalHistories: async (patientId: string, page = 1, pageSize = 10): Promise<PharmacyVitalHistory[]> => {
+    const params = new URLSearchParams({ patientId, page: String(page), pageSize: String(pageSize) });
+    const response = await apiCall<ApiResponse<any>>(
+      `/api/v1/personnel/pharmacies/vital-histories?${params.toString()}`,
       'GET'
     );
 
     return extractArray<any>(response.data).map((row: any) => ({
       id: row.id,
-      patientId: row.patientId,
+      patientId: row.patientId || patientId,
       patientName: row.patient?.name || 'Unknown patient',
       patientCode: row.patient?.patientCode,
-      recordedAt: row.recordedAt,
+      recordedAt: row.recordedAt || row.createdAt,
     }));
+  },
+
+  /**
+   * There is no pharmacy-wide vitals feed, so build one: take the first `patientSample`
+   * patients, fetch each one's latest entries, then keep the newest `limit` overall.
+   */
+  getRecentVitals: async (limit = 5, patientSample = 10): Promise<PharmacyVitalHistory[]> => {
+    const patients = await pharmacyPatientApi.getPatientsWithOptions({ page: 1, pageSize: patientSample });
+    if (patients.length === 0) return [];
+
+    const perPatient = await Promise.all(
+      patients.map(async (patient) => {
+        try {
+          const rows = await pharmacyPatientApi.getVitalHistories(patient.id, 1, limit);
+          const name = patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`.trim();
+          return rows.map((row) => ({
+            ...row,
+            patientName: row.patientName === 'Unknown patient' && name ? name : row.patientName,
+            patientCode: row.patientCode || patient.patientCode,
+          }));
+        } catch {
+          return [];
+        }
+      })
+    );
+
+    return perPatient
+      .flat()
+      .filter((row) => row.recordedAt)
+      .sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())
+      .slice(0, limit);
   },
 
   getAnalytics: async (
