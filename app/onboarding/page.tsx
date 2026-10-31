@@ -91,7 +91,6 @@ export default function OnboardingPage() {
         await onboard({
           personnelId: user.personnelId,
           role: user.role,
-          pharmacyName: isPharmacy ? pharmacyName.trim() : undefined,
           firstname: isPharmacy ? pharmacyName.trim() : firstName.trim(),
           lastname: isPharmacy ? null : lastName.trim(),
           phoneNumber: normalizePhoneNumber(phone),

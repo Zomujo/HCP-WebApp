@@ -29,7 +29,6 @@ interface AuthContextType {
   onboard: (data: {
     personnelId: string;
     role: 'health-worker' | 'pharmacy-personnel';
-    pharmacyName?: string;
     firstname: string;
     lastname: string | null;
     phoneNumber: string;
@@ -254,7 +253,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const onboard = async (data: {
     personnelId: string;
     role: 'health-worker' | 'pharmacy-personnel';
-    pharmacyName?: string;
     firstname: string;
     lastname: string | null;
     phoneNumber: string;

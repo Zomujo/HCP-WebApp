@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Sidebar } from '../../components/Sidebar';
-import { hcpPatientApi } from '../../lib/api';
+import { ApiError, hcpPatientApi } from '../../lib/api';
 import { formatConditions } from '../../lib/format';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import type { Patient, Appointment, Medication, MedicationAdherenceLog } from '../../lib/api';
@@ -286,7 +286,7 @@ function mergeVitalEntries(logs: any[], latestVitals: any[]): any[] {
   });
 }
 
-type AdherenceDayStatus = 'taken' | 'missed';
+type AdherenceDayStatus = 'taken' | 'missed' | 'pending' | 'none';
 
 interface AdherenceDay {
   date: string;
@@ -301,6 +301,8 @@ const ADHERENCE_WINDOW_DAYS = 30;
 const ADHERENCE_STATUS_LABEL: Record<AdherenceDayStatus, string> = {
   taken: 'Taken',
   missed: 'Missed',
+  pending: 'Pending',
+  none: 'No dose scheduled',
 };
 
 // Local calendar day, so doses taken late in the evening are not shifted to the next UTC day.
@@ -318,7 +320,7 @@ function buildAdherenceDays(logs: MedicationAdherenceLog[]): AdherenceDay[] {
     const key = toLocalDateKey(takenAt);
     const entry = counts.get(key) || { taken: 0, missed: 0 };
     if (log.taken) entry.taken += 1;
-    else entry.missed += 1;
+    else if (log.taken === false) entry.missed += 1;
     counts.set(key, entry);
   }
 
@@ -328,8 +330,9 @@ function buildAdherenceDays(logs: MedicationAdherenceLog[]): AdherenceDay[] {
     day.setDate(day.getDate() - (ADHERENCE_WINDOW_DAYS - 1 - index));
     const key = toLocalDateKey(day);
     const { taken, missed } = counts.get(key) || { taken: 0, missed: 0 };
-    // A day only counts as taken when every logged dose was taken; days without a taken dose are missed.
-    const status: AdherenceDayStatus = taken > 0 && missed === 0 ? 'taken' : 'missed';
+    // A day only counts as taken when every logged dose was taken. An unsettled day is pending today; earlier, nothing was scheduled.
+    const isToday = index === ADHERENCE_WINDOW_DAYS - 1;
+    const status: AdherenceDayStatus = missed > 0 ? 'missed' : taken > 0 ? 'taken' : isToday ? 'pending' : 'none';
 
     return {
       date: key,
@@ -596,7 +599,12 @@ export default function PatientDetailsPage() {
         }
       } catch (err) {
         console.error('Failed to load patient data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load patient data');
+        // A patient who deletes their account takes all of their records with them.
+        if (err instanceof ApiError && err.status === 404) {
+          setError('This patient is no longer available.');
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to load patient data');
+        }
       } finally {
         setIsLoading(false);
       }
@@ -1457,7 +1465,7 @@ export default function PatientDetailsPage() {
                       })}
                     </div>
                     <div className="adherence-legend">
-                      {(['taken', 'missed'] as const).map((status) => (
+                      {(['taken', 'missed', 'pending', 'none'] as const).map((status) => (
                         <span key={status}><i className={`adherence-day ${status}`} />{ADHERENCE_STATUS_LABEL[status]}</span>
                       ))}
                     </div>

@@ -2233,6 +2233,11 @@ tr:hover .row-arrow a {
   color: var(--danger-text);
 }
 
+.adherence-day.pending {
+  border-style: dashed;
+  border-color: var(--text-faint);
+}
+
 .adherence-legend {
   display: flex;
   gap: 16px;

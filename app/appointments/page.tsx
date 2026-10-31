@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Sidebar } from '../components/Sidebar';
 import { ProtectedRoute } from '../components/ProtectedRoute';
 import { useAuth } from '../lib/AuthContext';
-import { hcpPatientApi } from '../lib/api';
+import { ApiError, hcpPatientApi } from '../lib/api';
 import type { Appointment } from '../lib/api';
 
 function AppointmentsContent() {
@@ -101,7 +101,13 @@ function AppointmentsContent() {
       await hcpPatientApi.cancelAppointment(appointment.patientId, appointment.id, 'Cancelled by clinician');
       setAppointments((prev) => prev.filter((appt) => appt.id !== appointment.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel appointment');
+      // The patient may have deleted their account since this list loaded.
+      if (err instanceof ApiError && err.status === 404) {
+        setAppointments((prev) => prev.filter((appt) => appt.id !== appointment.id));
+        setError('This appointment is no longer available.');
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to cancel appointment');
+      }
     }
   };
 

@@ -113,7 +113,8 @@ export interface Medication {
 export interface MedicationAdherenceLog {
   id: string;
   takenAt: string;
-  taken: boolean;
+  /** Null while the day can still go either way (today) or when it scheduled no doses. */
+  taken: boolean | null;
 }
 
 export interface MedicationAdherenceMonth {
@@ -741,7 +742,6 @@ export const authApi = {
   onboard: async (data: {
     personnelId: string;
     role: 'health-worker' | 'pharmacy-personnel';
-    pharmacyName?: string;
     firstname: string;
     lastname: string | null;
     phoneNumber: string;
@@ -752,9 +752,6 @@ export const authApi = {
     const payload = {
       personnelId: data.personnelId,
       role: data.role === 'pharmacy-personnel' ? 'pharmacy' : 'clinician',
-      ...(data.role === 'pharmacy-personnel' && data.pharmacyName
-        ? { pharmacyName: data.pharmacyName.trim() }
-        : {}),
       firstname: data.firstname.trim(),
       lastname: data.lastname?.trim() || null,
       phoneNumber: normalizePhoneNumber(data.phoneNumber),
@@ -1053,7 +1050,7 @@ export const hcpPatientApi = {
         .map((log: any) => ({
           id: String(log.id ?? log._id ?? ''),
           takenAt: log.takenAt || log.date || log.createdAt || '',
-          taken: isTakenFlag(log.taken ?? log.status),
+          taken: (log.taken ?? log.status ?? null) === null ? null : isTakenFlag(log.taken ?? log.status),
         }))
         .filter((log: MedicationAdherenceLog) => log.takenAt),
     };
@@ -1096,12 +1093,13 @@ export const hcpPatientApi = {
   rescheduleAppointment: async (
     patientId: string,
     appointmentId: string,
-    reason: string
+    reason: string,
+    appointmentDate: string
   ): Promise<any> => {
     const response = await apiCall<ApiResponse<any>>(
       `/api/v1/hcp/patients/${patientId}/appointments/${appointmentId}/reschedule`,
       'PATCH',
-      { reason }
+      { reason, appointmentDate }
     );
     return response.data!;
   },

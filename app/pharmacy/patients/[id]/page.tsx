@@ -17,7 +17,7 @@ import {
 import { Sidebar } from '../../../components/Sidebar';
 import { ProtectedRoute } from '../../../components/ProtectedRoute';
 import { RecordVitalsModal, RecordVitalsSubmission } from '../../../components/RecordVitalsModal';
-import { pharmacyPatientApi } from '../../../lib/api';
+import { ApiError, pharmacyPatientApi } from '../../../lib/api';
 import type { Patient, VitalEntry } from '../../../lib/api';
 import { formatConditions } from '../../../lib/format';
 import {
@@ -157,7 +157,13 @@ function PharmacyPatientDetail() {
         setPatient(patientData);
         await loadVitals();
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load patient details');
+        if (cancelled) return;
+        // A patient who deletes their account takes all of their records with them.
+        if (err instanceof ApiError && err.status === 404) {
+          setError('This patient is no longer available.');
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to load patient details');
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
