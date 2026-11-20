@@ -1,7 +1,8 @@
 // API Configuration and Service Layer
+import { CONFIG } from './config';
 import { decodeJWT } from './jwt';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://dnh-server-staging.up.railway.app';
+const API_BASE_URL = CONFIG.API_BASE_URL;
 
 export interface ApiResponse<T> {
   success?: boolean;

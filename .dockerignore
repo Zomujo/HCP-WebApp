@@ -1,0 +1,10 @@
+.git
+.next
+out
+node_modules
+deploy
+*.log
+*.tsbuildinfo
+.DS_Store
+# Settings come in as build arguments, never from a file in the image.
+.env*
