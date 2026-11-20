@@ -199,7 +199,7 @@ sudo ssh-keygen -t ed25519 -N '' -C hcp-web-vps -f /root/.ssh/hcp-web
 sudo cat /root/.ssh/hcp-web.pub
 ```
 
-Add the public key on GitHub: repository → Settings → Deploy keys → Add, **without** write access. Then:
+Add the public key on GitHub to the GHS repository, `projectyelima-source/HCP-WebApp`: Settings → Deploy keys → Add, **without** write access. Then:
 
 ```bash
 sudo tee -a /root/.ssh/config >/dev/null <<'EOF'
@@ -212,7 +212,7 @@ EOF
 sudo ssh -T git@github.com-hcp-web        # "successfully authenticated", answer yes to the host key
 ```
 
-`deploy.sh` clones `git@github.com-hcp-web:Zomujo/HCP-WebApp.git`. To deploy from another repository (a fork), put its URL in `/opt/hcp-web/deploy.conf` (root, 644), using the same host alias:
+`deploy.sh` clones `git@github.com-hcp-web:projectyelima-source/HCP-WebApp.git`, the GHS repository (`projectyelima-source/HCP-WebApp` on GitHub). To deploy from another repository, put its URL in `/opt/hcp-web/deploy.conf` (root, 644), using the same host alias:
 
 ```bash
 echo 'REPO=git@github.com-hcp-web:<owner>/HCP-WebApp.git' | sudo tee /opt/hcp-web/deploy.conf
