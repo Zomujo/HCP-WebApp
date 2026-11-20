@@ -1,0 +1,66 @@
+# Reference copy of /opt/hcp-web/compose.yml on the VPS.
+#
+# deploy.sh builds and tags the web images; this file only runs them. See
+# deploy/RUNBOOK.md for the whole procedure.
+#
+# The web app has no settings at run time: its two NEXT_PUBLIC_* values are
+# baked into each image when deploy.sh builds it, so there is no env_file here.
+# The browser calls the API directly; this server only serves pages.
+#
+# The containers publish on loopback only (Docker-published ports bypass ufw);
+# a reverse proxy on the VPS (nginx, Caddy or a Cloudflare Tunnel) terminates
+# TLS and forwards to them:
+#   production  127.0.0.1:3000, built from master
+#   staging     127.0.0.1:3001, built from staging
+#
+# Needs Docker Engine 25+ and Compose 2.24+.
+
+name: hcp-web
+
+x-web: &web
+  restart: unless-stopped
+  pull_policy: never
+  init: true
+  stop_grace_period: 10s
+  # The image carries its own health check on GET /login. Only its timing is
+  # changed here: probe every 2s while starting, so a deploy sees "healthy" as
+  # soon as the server answers.
+  healthcheck:
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
+    start_interval: 2s
+  # Nothing in the image is writable. Next.js still writes a page cache at
+  # run time, so it gets a small tmpfs owned by the image's node user (1000).
+  read_only: true
+  tmpfs:
+    - /tmp
+    - /app/.next/cache:uid=1000,gid=1000,mode=0755,size=64m
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "5"
+
+services:
+  web-staging:
+    <<: *web
+    image: hcp-web:staging
+    container_name: hcp-web-staging
+    networks: [staging]
+    ports:
+      - "127.0.0.1:3001:3000"
+
+  web-production:
+    <<: *web
+    image: hcp-web:production
+    container_name: hcp-web-production
+    networks: [production]
+    ports:
+      - "127.0.0.1:3000:3000"
+
+networks:
+  # One network each, so the two environments never share one.
+  staging:
+  production:
