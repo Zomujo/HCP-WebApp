@@ -18,7 +18,7 @@ set -euo pipefail
 # On the server, set the repository in $APP_DIR/deploy.conf instead
 # (REPO=...), so that copying a new deploy.sh never resets it.
 APP_DIR="${HCP_WEB_DIR:-/opt/hcp-web}"
-REPO="git@github.com-hcp-web:Zomujo/HCP-WebApp.git"
+REPO="git@github.com-hcp-web:projectyelima-source/HCP-WebApp.git"
 if [ -f "$APP_DIR/deploy.conf" ]; then
   # shellcheck source=/dev/null
   . "$APP_DIR/deploy.conf"
