@@ -224,6 +224,8 @@ Copy `compose.yml` and `deploy.sh` as in section 6. Fill in `.env.<env>` from `d
 
 ### 7.3 First deploy
 
+The `staging` deploy builds from the repository's `staging` branch. If it doesn't exist yet, create it from `master` (on GitHub, or `git push origin master:staging`) and protect it like `master`.
+
 Deploy the API first, so its public address exists. Then:
 
 ```bash

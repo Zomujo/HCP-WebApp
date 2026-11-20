@@ -117,14 +117,22 @@ check_env_file() {
     problems+=("remove the 'export ' prefix from every line (KEY=value only)")
   fi
 
+  local value
   for key in "${BUILD_KEYS[@]}"; do
-    [ -n "$(env_value "$ENV_FILE" "$key")" ] || problems+=("$key must be set")
+    value="$(env_value "$ENV_FILE" "$key")"
+    if [ -z "$value" ]; then
+      problems+=("$key must be set")
+    elif [[ "$value" =~ [[:space:]] ]]; then
+      # The value is baked in exactly as written, so a trailing space or a
+      # "# comment" would break every API call or the Google sign-in.
+      problems+=("$key must not contain spaces (check for a trailing space or a # comment)")
+    fi
   done
 
   # Browsers block an http:// API called from an https:// page, and the
   # build itself refuses a path or trailing slash.
   url="$(env_value "$ENV_FILE" NEXT_PUBLIC_API_URL)"
-  if [ -n "$url" ] && ! [[ "$url" =~ ^https://[^/]+$ ]]; then
+  if [ -n "$url" ] && ! [[ "$url" =~ ^https://[^/[:space:]]+$ ]]; then
     problems+=("NEXT_PUBLIC_API_URL must be the API's https:// origin, with no path or trailing slash")
   fi
 

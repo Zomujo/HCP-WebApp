@@ -1,22 +1,28 @@
-import { PHASE_PRODUCTION_BUILD } from 'next/constants.js';
+import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from 'next/constants.js';
 
 // NEXT_PUBLIC_* values are inlined into the browser bundle at build time, so a
 // build without them would ship a broken app. Refuse to build instead.
 const REQUIRED_AT_BUILD = ['NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_GOOGLE_CLIENT_ID'];
 
-function checkBuildSettings() {
-  const problems = REQUIRED_AT_BUILD.filter((key) => !process.env[key]?.trim()).map(
-    (key) => `${key} must be set`,
-  );
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (apiUrl && !/^https?:\/\/[^/]+$/.test(apiUrl)) {
+function settingsProblems() {
+  const problems = [];
+  for (const key of REQUIRED_AT_BUILD) {
+    const value = process.env[key];
+    if (!value?.trim()) {
+      problems.push(`${key} must be set`);
+    } else if (/\s/.test(value)) {
+      // Next inlines the raw value, so a stray space or "# comment" would
+      // ship inside every API call or the Google client ID.
+      problems.push(`${key} must not contain spaces (check for a trailing space or a # comment)`);
+    }
+  }
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (apiUrl && !/\s/.test(apiUrl) && !/^https?:\/\/[^/]+$/.test(apiUrl)) {
     problems.push(
       'NEXT_PUBLIC_API_URL must be the API origin only, e.g. https://api.example.gov.gh (no path, no trailing slash)',
     );
   }
-  if (problems.length > 0) {
-    throw new Error(`Cannot build the web app:\n  - ${problems.join('\n  - ')}`);
-  }
+  return problems;
 }
 
 // Applied to every response. The reverse proxy adds HSTS, since it is the one
@@ -29,8 +35,15 @@ const securityHeaders = [
 ];
 
 export default function nextConfig(phase) {
-  if (phase === PHASE_PRODUCTION_BUILD) {
-    checkBuildSettings();
+  const problems =
+    phase === PHASE_PRODUCTION_BUILD || phase === PHASE_DEVELOPMENT_SERVER ? settingsProblems() : [];
+  if (problems.length > 0) {
+    const list = `\n  - ${problems.join('\n  - ')}`;
+    if (phase === PHASE_PRODUCTION_BUILD) {
+      throw new Error(`Cannot build the web app:${list}`);
+    }
+    // The dev server still starts, but every API call would fail.
+    console.warn(`\n⚠ Web app settings are incomplete (copy .env.example to .env.local):${list}\n`);
   }
 
   return {
